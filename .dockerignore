@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+**/dist
+**/.pglite
+.git
+.github
+.ci-pending
+*.log
+.env
+.env.local

@@ -294,10 +294,29 @@ describe("catalog endpoints", () => {
     expect((await harness.app.request("/v1/models/test/nope")).status).toBe(404);
   });
 
-  it("reports health without auth", async () => {
+  it("reports health without auth, and checks the database", async () => {
     harness = await createHarness({ apiKeys: ["sk-test-key"] });
     const res = await harness.app.request("/health");
     expect(res.status).toBe(200);
-    expect(((await res.json()) as any).providers).toEqual(["anthropic", "openai"]);
+
+    const body = (await res.json()) as any;
+    expect(body.status).toBe("ok");
+    expect(body.database).toBe("ok");
+    expect(body.models).toBeGreaterThan(0);
+    expect(body.providers).toEqual(["anthropic", "openai"]);
+  });
+
+  it("reports 503 when the catalog store is unreachable", async () => {
+    // Reporting "ok" here would keep a broken instance in the load balancer
+    // pool while every request it received failed.
+    harness = await createHarness();
+    await harness.db.close();
+
+    const res = await harness.app.request("/health");
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as any).database).toBe("unreachable");
+
+    // Already closed; stop afterEach from double-closing.
+    harness.close = async () => {};
   });
 });

@@ -51,13 +51,16 @@ const app = createApp({
   apiKeys: config.apiKeys,
   ttftTimeoutMs: config.ttftTimeoutMs,
   attemptTimeoutMs: config.requestTimeoutMs,
+  rateLimitRpm: config.rateLimitRpm,
 });
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   const auth = config.apiKeys.length ? `${config.apiKeys.length} key(s)` : "DISABLED";
+  const limit = config.rateLimitRpm > 0 ? `${config.rateLimitRpm}/min` : "off";
   console.log(
     `[crossbar] listening on http://localhost:${info.port}  ` +
-      `db=${handle.driver}  models=${catalog.snapshot.models.length}  auth=${auth}`,
+      `db=${handle.driver}  models=${catalog.snapshot.models.length}  ` +
+      `auth=${auth}  ratelimit=${limit}`,
   );
 });
 

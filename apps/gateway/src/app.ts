@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthVariables } from "./auth.js";
 import { auth } from "./auth.js";
+import { createRateLimiter, rateLimit } from "./rate-limit.js";
 import type { DB } from "./db/client.js";
 import { CrossbarError, toErrorEnvelope } from "./errors.js";
 import type { ProviderRegistry } from "./providers/types.js";
@@ -27,6 +29,8 @@ export interface AppDeps {
   apiKeys: string[];
   ttftTimeoutMs: number;
   attemptTimeoutMs: number;
+  /** Requests per minute per caller. Zero disables the limiter. */
+  rateLimitRpm?: number;
   /** Injected for reproducible routing in tests. */
   random?: () => number;
 }
@@ -73,13 +77,30 @@ export function createApp(deps: AppDeps): App {
     ),
   );
 
-  app.get("/health", (c) =>
-    c.json({
-      status: "ok",
-      models: deps.catalog.snapshot.models.length,
-      providers: deps.providers.ids(),
-    }),
-  );
+  // Liveness AND readiness: a gateway that cannot reach its catalog store is
+  // not ready to route, and reporting "ok" would keep it in a load balancer
+  // pool while every request failed.
+  app.get("/health", async (c) => {
+    const models = deps.catalog.snapshot.models.length;
+    let database: "ok" | "unreachable" = "ok";
+    try {
+      await deps.db.execute(sql`select 1`);
+    } catch {
+      database = "unreachable";
+    }
+
+    const healthy = database === "ok" && models > 0;
+    return c.json(
+      {
+        status: healthy ? "ok" : "degraded",
+        database,
+        models,
+        providers: deps.providers.ids(),
+        uptime_s: Math.floor(process.uptime()),
+      },
+      healthy ? 200 : 503,
+    );
+  });
 
   const v1 = new Hono<AppEnv>();
   // Body limit runs before auth: rejecting an oversized body must not require
@@ -103,6 +124,9 @@ export function createApp(deps: AppDeps): App {
     }),
   );
   v1.use("*", auth(deps.apiKeys));
+  // After auth, so the bucket is keyed by the authenticated caller rather than
+  // by a header they control.
+  v1.use("*", rateLimit(createRateLimiter({ requestsPerMinute: deps.rateLimitRpm ?? 0 })));
 
   registerModelRoutes(v1, deps);
   registerChatRoute(v1, deps);

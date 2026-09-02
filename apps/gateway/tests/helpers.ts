@@ -79,6 +79,8 @@ export interface HarnessOptions {
   random?: () => number;
   ttftTimeoutMs?: number;
   attemptTimeoutMs?: number;
+  /** Off by default so ordinary tests are not throttled. */
+  rateLimitRpm?: number;
 }
 
 export async function createHarness(opts: HarnessOptions = {}): Promise<Harness> {
@@ -118,6 +120,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     apiKeys: opts.apiKeys ?? [],
     ttftTimeoutMs: opts.ttftTimeoutMs ?? 5_000,
     attemptTimeoutMs: opts.attemptTimeoutMs ?? 5_000,
+    rateLimitRpm: opts.rateLimitRpm ?? 0,
     // Always draw the first item of the weighted pool unless a test says otherwise.
     random: opts.random ?? (() => 0),
   });

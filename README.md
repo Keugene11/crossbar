@@ -127,7 +127,26 @@ first.
   stored.
 - **Client disconnects propagate upstream** for the life of a stream, so a
   client hanging up stops the generation instead of leaving it billing.
-- `pnpm audit` is clean.
+- **Per-caller rate limiting** (`CROSSBAR_RATE_LIMIT_RPM`, default 600/min) via
+  a token bucket keyed by API key, falling back to forwarded IP. A bucket
+  rather than a fixed window, because a window lets a caller spend a full quota
+  at the end of one and again at the start of the next — twice the nominal rate
+  against providers that bill for it. The bucket map is itself bounded and
+  swept, since unauthenticated callers are keyed by a header they control.
+- `pnpm audit` is clean, and CI runs it on every push.
+
+## Deploying
+
+```bash
+docker build -t crossbar .
+docker run -p 8080:8080   -e CROSSBAR_API_KEYS=... -e ANTHROPIC_API_KEY=... -e OPENAI_API_KEY=...   -v crossbar-data:/data crossbar
+```
+
+Multi-stage, non-root, with a `HEALTHCHECK` wired to `/health`. That endpoint is
+readiness as well as liveness: it pings the catalog store and returns 503 when
+the database is unreachable or the catalog is empty, so a broken instance drops
+out of the pool instead of accepting traffic it cannot serve. Set `DATABASE_URL`
+to point at a Postgres server; otherwise PGlite persists to the `/data` volume.
 
 ## Adding a provider
 
@@ -166,7 +185,7 @@ src/
 ## Tests
 
 ```bash
-pnpm test         # 107 tests, no network, no ports
+pnpm test         # 120 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```

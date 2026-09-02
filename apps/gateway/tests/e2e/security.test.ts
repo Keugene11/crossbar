@@ -153,3 +153,50 @@ describe("credential handling", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("rate limiting", () => {
+  it("throttles a caller past its burst and reports Retry-After", async () => {
+    harness = await createHarness({ apiKeys: ["sk-alice"], rateLimitRpm: 60 });
+
+    const send = () =>
+      postChat(
+        harness!.app,
+        { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+        { authorization: "Bearer sk-alice" },
+      );
+
+    // Burst defaults to a quarter-minute of quota: 15 at 60/min.
+    let throttled: Response | undefined;
+    for (let i = 0; i < 40; i++) {
+      const res = await send();
+      if (res.status === 429) {
+        throttled = res;
+        break;
+      }
+    }
+
+    expect(throttled).toBeDefined();
+    expect(Number(throttled!.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    expect(((await throttled!.json()) as any).error.code).toBe("rate_limited");
+  });
+
+  it("buckets each key separately, so one caller cannot starve another", async () => {
+    harness = await createHarness({ apiKeys: ["sk-alice", "sk-bob"], rateLimitRpm: 60 });
+
+    for (let i = 0; i < 40; i++) {
+      const res = await postChat(
+        harness.app,
+        { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+        { authorization: "Bearer sk-alice" },
+      );
+      if (res.status === 429) break;
+    }
+
+    const bob = await postChat(
+      harness.app,
+      { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-bob" },
+    );
+    expect(bob.status).toBe(200);
+  });
+});

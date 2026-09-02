@@ -30,6 +30,8 @@ export interface Config {
   requestTimeoutMs: number;
   /** Catalog cache lifetime in ms. */
   catalogTtlMs: number;
+  /** Sustained requests per minute per caller. Zero disables the limiter. */
+  rateLimitRpm: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -45,6 +47,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ttftTimeoutMs: int(env.CROSSBAR_TTFT_TIMEOUT_MS, 30_000),
     requestTimeoutMs: int(env.CROSSBAR_REQUEST_TIMEOUT_MS, 600_000),
     catalogTtlMs: int(env.CROSSBAR_CATALOG_TTL_MS, 60_000),
+    rateLimitRpm: int(env.CROSSBAR_RATE_LIMIT_RPM, 600),
   };
 }
 
