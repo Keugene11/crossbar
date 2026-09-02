@@ -37,6 +37,21 @@ export const CompletionRequest = z
   })
   .strict();
 
+/**
+ * The subset of a fetch Response this shim touches.
+ *
+ * Declared structurally rather than relying on the ambient `Response`: the
+ * serverless builder compiles this file against a different lib than the
+ * workspace does, and there `Response` lacks `json()`. Naming what we use
+ * keeps the file honest and portable across both.
+ */
+interface UpstreamResponse {
+  ok: boolean;
+  status: number;
+  headers: Iterable<[string, string]>;
+  json(): Promise<unknown>;
+}
+
 /** Rewrite a chat completion body into the legacy text-completion shape. */
 function toLegacy(body: Record<string, unknown>): Record<string, unknown> {
   const choices = (body.choices as Array<Record<string, any>> | undefined) ?? [];
@@ -70,7 +85,7 @@ export function registerCompletionRoute(app: Hono<AppEnv>, _deps: AppDeps): void
 
     // Re-enter the app through the chat route so this endpoint can never drift
     // from it: same auth, same rate limit, same routing, same ledger.
-    const upstream = await app.request(
+    const upstream = (await app.request(
       "/chat/completions",
       {
         method: "POST",
@@ -79,13 +94,13 @@ export function registerCompletionRoute(app: Hono<AppEnv>, _deps: AppDeps): void
         signal: c.req.raw.signal,
       },
       c.env,
-    );
+    )) as unknown as UpstreamResponse;
 
     if (!upstream.ok || parsed.data.stream) {
       // Errors keep their envelope, and streamed bodies pass through untouched:
       // rewriting SSE chunk shapes for a legacy endpoint is not worth the risk
       // of corrupting a live stream.
-      return upstream;
+      return upstream as unknown as Response;
     }
 
     const body = (await upstream.json()) as Record<string, unknown>;
