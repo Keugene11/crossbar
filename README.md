@@ -9,8 +9,10 @@ the request into that provider's native dialect, streams the response back
 re-normalized into OpenAI SSE chunks, cascades to the next candidate on failure,
 and records tokens and cost for every generation.
 
+**Live:** <https://crossbar-eta.vercel.app>
+
 ```bash
-curl localhost:8080/v1/chat/completions \
+curl https://crossbar-eta.vercel.app/v1/chat/completions \
   -H "Authorization: Bearer $CROSSBAR_KEY" -H 'content-type: application/json' \
   -d '{
     "model": "anthropic/claude-opus-5",
@@ -193,6 +195,21 @@ outage.
 
 ## Deploying
 
+Two modes, one wiring path. **Durable** uses Postgres (or embedded PGlite) and
+keeps the ledger across restarts. **Stateless** compiles the catalog in and
+keeps the ledger in memory for the life of the process — the right shape for
+serverless, where there is no writable disk for an embedded database and no
+connection worth pooling. `CROSSBAR_STATELESS=1` forces it; it is also the
+default on Vercel or Lambda when no `DATABASE_URL` is set.
+
+Routing, translation, failover and accounting are identical either way, because
+none of them touch storage directly. Non-durability is reported rather than
+hidden: `/health` returns the store kind and a `durable` flag.
+
+```bash
+vercel deploy --prod --env CROSSBAR_STATELESS=1 --env CROSSBAR_API_KEYS=...
+```
+
 ```bash
 docker build -t crossbar .
 docker run -p 8080:8080   -e CROSSBAR_API_KEYS=... -e ANTHROPIC_API_KEY=... -e OPENAI_API_KEY=...   -v crossbar-data:/data crossbar
@@ -236,13 +253,16 @@ src/
                 auto router, variants, token sizing, transforms, health stats
   providers/    anthropic/ (dialect translation), openai/ (reference), classify
   accounting/   cost math and the generation ledger
+  store/        GenerationStore: postgres + in-memory, held to one contract
   db/           Drizzle schema, migrations, dual PGlite / node-postgres driver
+bootstrap.ts    durable vs stateless wiring
+api/index.ts    serverless entrypoint
 ```
 
 ## Tests
 
 ```bash
-pnpm test         # 161 tests, no network, no ports
+pnpm test         # 181 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```
