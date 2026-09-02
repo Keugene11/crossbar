@@ -83,16 +83,26 @@ export function registerCompletionRoute(app: Hono<AppEnv>, _deps: AppDeps): void
     const { prompt, ...rest } = parsed.data;
     const text = Array.isArray(prompt) ? (prompt[0] ?? "") : prompt;
 
+    // Forward only the headers the chat route acts on. Copying the incoming
+    // set wholesale would carry the original `content-length`, which no longer
+    // matches the rewritten body.
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    for (const name of ["authorization", "http-referer", "x-title", "x-forwarded-for"]) {
+      const value = c.req.header(name);
+      if (value) headers[name] = value;
+    }
+
     // Re-enter the app through the chat route so this endpoint can never drift
     // from it: same auth, same rate limit, same routing, same ledger.
     const upstream = (await app.request(
       "/chat/completions",
       {
         method: "POST",
-        headers: c.req.raw.headers,
+        headers,
         body: JSON.stringify({ ...rest, messages: [{ role: "user", content: text }] }),
-        signal: c.req.raw.signal,
-      },
+        // Keeps a disconnect propagating through the shim to the provider.
+        signal: (c.req.raw as { signal?: unknown }).signal,
+      } as never,
       c.env,
     )) as unknown as UpstreamResponse;
 
