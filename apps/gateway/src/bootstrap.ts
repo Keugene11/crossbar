@@ -1,6 +1,7 @@
 import { createApp, type App, type AppDeps } from "./app.js";
 import { config, type Config } from "./config.js";
 import { AnthropicAdapter } from "./providers/anthropic/index.js";
+import { EchoAdapter } from "./providers/echo/index.js";
 import { OpenAIAdapter } from "./providers/openai/index.js";
 import { ProviderRegistry } from "./providers/types.js";
 import { Catalog, staticSource, type Endpoint, type Model, type Provider } from "./registry/catalog.js";
@@ -30,7 +31,8 @@ export interface Bootstrapped {
 function buildProviders(cfg: Config): ProviderRegistry {
   return new ProviderRegistry()
     .register(new AnthropicAdapter({ apiKey: cfg.anthropicApiKey }))
-    .register(new OpenAIAdapter({ apiKey: cfg.openaiApiKey }));
+    .register(new OpenAIAdapter({ apiKey: cfg.openaiApiKey }))
+    .register(new EchoAdapter());
 }
 
 /** Materialise the compiled-in seed as catalog rows, with no database. */
@@ -94,6 +96,7 @@ function commonDeps(cfg: Config): Omit<AppDeps, "store" | "catalog" | "db"> {
     providers: buildProviders(cfg),
     stats: new StatsTracker(),
     apiKeys: cfg.apiKeys,
+    freeApiKeys: cfg.freeApiKeys,
     ttftTimeoutMs: cfg.ttftTimeoutMs,
     attemptTimeoutMs: cfg.requestTimeoutMs,
     rateLimitRpm: cfg.rateLimitRpm,

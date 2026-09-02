@@ -76,6 +76,7 @@ export interface HarnessOptions {
   anthropic?: FakeUpstreamOptions;
   openai?: FakeUpstreamOptions;
   apiKeys?: string[];
+  freeApiKeys?: string[];
   /** Defaults to a fixed value so price-weighted ordering is reproducible. */
   random?: () => number;
   ttftTimeoutMs?: number;
@@ -120,6 +121,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     providers,
     stats,
     apiKeys: opts.apiKeys ?? [],
+    freeApiKeys: opts.freeApiKeys ?? [],
     ttftTimeoutMs: opts.ttftTimeoutMs ?? 5_000,
     attemptTimeoutMs: opts.attemptTimeoutMs ?? 5_000,
     rateLimitRpm: opts.rateLimitRpm ?? 0,

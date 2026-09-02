@@ -18,6 +18,11 @@ export interface Config {
   logLevel: "debug" | "info" | "warn" | "error";
   /** Bearer keys accepted by the gateway. Empty in test/dev disables auth. */
   apiKeys: string[];
+  /**
+   * Keys restricted to zero-cost endpoints. Safe to publish -- the restriction
+   * is enforced by routing, not by hoping nobody finds the key.
+   */
+  freeApiKeys: string[];
   /** Unset => embedded PGlite. Set => node-postgres against this URL. */
   databaseUrl: string | undefined;
   /** Directory for the embedded PGlite datadir. */
@@ -40,6 +45,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: int(env.PORT, 8080),
     logLevel: level ?? "info",
     apiKeys: csv(env.CROSSBAR_API_KEYS),
+    freeApiKeys: csv(env.CROSSBAR_FREE_API_KEYS),
     databaseUrl: env.DATABASE_URL || undefined,
     pgliteDir: env.CROSSBAR_PGLITE_DIR ?? "./.pglite",
     anthropicApiKey: env.ANTHROPIC_API_KEY || undefined,

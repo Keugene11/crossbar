@@ -37,6 +37,11 @@ export interface SeedProvider {
  */
 export const providerSeed: SeedProvider[] = [
   {
+    id: "crossbar",
+    name: "crossbar (built-in)",
+    mayTrainOnData: false,
+  },
+  {
     id: "anthropic",
     name: "Anthropic",
     mayTrainOnData: false,
@@ -86,6 +91,28 @@ const NO_SAMPLING = ["temperature", "top_p", "top_k"];
 const NO_SAMPLING_NO_FORCED_TOOLS = [...NO_SAMPLING, "tool_choice:required", "tool_choice:function"];
 
 export const catalogSeed: SeedModel[] = [
+  {
+    // A real endpoint served by a built-in adapter, so the gateway can be
+    // exercised end to end before you have credentials with anyone.
+    id: "crossbar/echo",
+    name: "crossbar: Echo (demo)",
+    description:
+      "Demo model. Answers without calling any upstream, so you can try routing, streaming and usage accounting with no provider keys. Free.",
+    contextLength: 128_000,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    endpoints: [
+      {
+        provider: "crossbar",
+        upstreamModelId: "echo",
+        pricePrompt: 0,
+        priceCompletion: 0,
+        maxOutputTokens: 4_096,
+        supportsTools: false,
+        dataCollection: "deny",
+      },
+    ],
+  },
   {
     // Not a real model: `crossbar/auto` is resolved to a concrete one before
     // routing. It carries no endpoints, and the router skips it explicitly.

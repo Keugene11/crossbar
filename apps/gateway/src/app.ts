@@ -33,6 +33,8 @@ export interface AppDeps {
   providers: ProviderRegistry;
   stats: StatsTracker;
   apiKeys: string[];
+  /** Keys restricted to zero-cost endpoints. */
+  freeApiKeys?: string[];
   ttftTimeoutMs: number;
   attemptTimeoutMs: number;
   /** Requests per minute per caller. Zero disables the limiter. */
@@ -130,6 +132,7 @@ export function createApp(deps: AppDeps): App {
   publicV1.onError(onError);
   publicV1.use("*", async (c, next) => {
     c.set("keyId", null);
+    c.set("tier", "full");
     return next();
   });
   registerModelRoutes(publicV1, deps);
@@ -157,7 +160,7 @@ export function createApp(deps: AppDeps): App {
         ),
     }),
   );
-  v1.use("*", auth(deps.apiKeys));
+  v1.use("*", auth(deps.apiKeys, deps.freeApiKeys ?? []));
   // After auth, so the bucket is keyed by the authenticated caller rather than
   // by a header they control.
   v1.use("*", rateLimit(createRateLimiter({ requestsPerMinute: deps.rateLimitRpm ?? 0 })));

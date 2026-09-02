@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { AppDeps, AppEnv } from "../app.js";
+import type { KeyTier } from "../auth.js";
 import { costMicro, microToUsd } from "../accounting/cost.js";
 import { recordGeneration, type GenerationDraft } from "../accounting/record.js";
 import { CrossbarError, toErrorEnvelope, type AttemptRecord } from "../errors.js";
@@ -79,6 +80,30 @@ function clientSignal(c: Context<AppEnv>): AbortSignal {
   return (c.req.raw as unknown as { signal: AbortSignal }).signal;
 }
 
+/**
+ * Translate "nothing matched" into the reason a free-tier key actually hit.
+ *
+ * The restriction is a price ceiling, so exhausting the candidate list looks
+ * identical to any other unroutable request -- and "no endpoint satisfies the
+ * routing constraints" sends someone hunting for an outage when the real
+ * answer is that their key cannot spend money.
+ */
+function withFreeTierMessage<T>(tier: KeyTier, build: () => T): T {
+  try {
+    return build();
+  } catch (err) {
+    if (tier === "free" && err instanceof CrossbarError && err.code === "no_endpoints") {
+      throw new CrossbarError({
+        status: 402,
+        code: "permission",
+        message: "This key may only use free models. Try `crossbar/echo`.",
+        retryable: false,
+      });
+    }
+    throw err;
+  }
+}
+
 function wantsUsage(request: ChatCompletionRequest): boolean {
   return request.usage?.include === true || request.stream_options?.include_usage === true;
 }
@@ -100,7 +125,14 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     // `model` may carry a variant suffix (:nitro / :floor); resolve it to the
     // catalog id plus the sort it implies before anything else looks at it.
     const ref = parseModelRef(request.model);
-    const prefs = applyVariant(request.provider ?? defaultProviderPreferences, ref.variant);
+    let prefs = applyVariant(request.provider ?? defaultProviderPreferences, ref.variant);
+
+    // A free-tier key is confined to zero-cost endpoints. Expressed as a price
+    // ceiling so it runs through the same filter as any other constraint --
+    // there is no second code path that could disagree with the first.
+    if (c.get("tier") === "free") {
+      prefs = { ...prefs, max_price: { prompt: 0, completion: 0 } };
+    }
 
     // `crossbar/auto` resolves to a concrete model before anything else runs,
     // so every downstream stage sees an ordinary named-model request.
@@ -136,17 +168,19 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     );
     const routed = transformed.request;
 
-    const plan = buildCandidates(
-      deps.catalog,
-      modelId,
-      request.models?.map((m) => parseModelRef(m).id),
-      prefs,
-      { stats: deps.stats, random: deps.random ?? Math.random },
-      requiredCapabilities(request),
-      {
-        promptTokens: estimatePromptTokens(routed),
-        maxOutputTokens: routed.max_completion_tokens ?? routed.max_tokens ?? 0,
-      },
+    const plan = withFreeTierMessage(c.get("tier"), () =>
+      buildCandidates(
+        deps.catalog,
+        modelId,
+        request.models?.map((m) => parseModelRef(m).id),
+        prefs,
+        { stats: deps.stats, random: deps.random ?? Math.random },
+        requiredCapabilities(request),
+        {
+          promptTokens: estimatePromptTokens(routed),
+          maxOutputTokens: routed.max_completion_tokens ?? routed.max_tokens ?? 0,
+        },
+      ),
     );
 
     // Awaited rather than fire-and-forget: the generation id ships in the

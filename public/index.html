@@ -179,6 +179,50 @@ pre {
 }
 pre .k { color: var(--accent); }
 pre .s { color: var(--green); }
+pre .c { color: var(--dim); }
+
+/* ---------- quickstart ---------- */
+.steps { counter-reset: s; display: flex; flex-direction: column; gap: 14px; }
+.step { display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start; }
+.step::before {
+  counter-increment: s; content: counter(s);
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 650;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); margin-top: 2px;
+}
+.step h4 { margin: 3px 0 7px; font-size: 15px; font-weight: 570; }
+.step p { margin: 0 0 9px; color: var(--fg-mid); font-size: 14px; }
+.tabs { display: flex; gap: 5px; margin-bottom: 8px; }
+.tab { font-size: 12.5px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--dim); }
+.tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.copy { position: absolute; top: 9px; right: 9px; font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-soft); color: var(--dim); }
+.copy:hover { color: var(--fg); border-color: var(--dim); }
+.codewrap { position: relative; }
+
+/* ---------- playground ---------- */
+.pg { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 860px) { .pg { grid-template-columns: 1fr; } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.field { margin-bottom: 11px; }
+.field label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .06em; }
+textarea, .field input {
+  width: 100%; background: var(--bg-soft); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 14px; outline: none; resize: vertical;
+}
+.field input, .field select { font-family: var(--mono); font-size: 12.5px; }
+textarea:focus, .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field select { width: 100%; }
+.out {
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  min-height: 190px; white-space: pre-wrap; font-size: 14px; line-height: 1.62; overflow-wrap: anywhere;
+}
+.out.err { border-color: #b45309; color: var(--amber); font-family: var(--mono); font-size: 12px; }
+.meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 11px; font-size: 12px; color: var(--dim); }
+.meta b { color: var(--fg); font-family: var(--mono); font-weight: 500; }
+.row { display: flex; gap: 9px; align-items: center; }
+.hint { font-size: 12.5px; color: var(--dim); margin: 9px 0 0; }
+.cursor::after { content: "8b"; color: var(--accent); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
 
 /* ---------- footer ---------- */
 footer { border-top: 1px solid var(--line-soft); padding: 30px 0 46px; color: var(--dim); font-size: 13px; }
@@ -206,6 +250,8 @@ footer a:hover { color: var(--fg); }
       crossbar
     </a>
     <div class="navlinks">
+      <a href="#start">Quickstart</a>
+      <a href="#play">Playground</a>
       <a href="#models">Models</a>
       <a href="#providers">Providers</a>
       <a href="#api">API</a>
@@ -228,8 +274,8 @@ footer a:hover { color: var(--fg); }
       policy, translates it into the provider's native dialect, and fails over to the next
       candidate when one goes down.</p>
     <div class="cta">
-      <a class="btn primary" href="#models">Browse models</a>
-      <a class="btn" href="#api">View the API</a>
+      <a class="btn primary" href="#play">Try it now</a>
+      <a class="btn" href="#start">Quickstart</a>
     </div>
     <div class="stats" id="stats">
       <div class="stat"><b id="s-models">—</b><span>Models</span></div>
@@ -239,6 +285,92 @@ footer a:hover { color: var(--fg); }
     </div>
   </div>
 </header>
+
+
+<section id="start">
+  <div class="wrap">
+    <div class="shead"><div><h2>Quickstart</h2><p>Three steps. The first one works right now, with no account anywhere.</p></div></div>
+
+    <div class="steps">
+      <div class="step">
+        <div>
+          <h4>Call the demo model</h4>
+          <p>Every gateway needs credentials before you can try it. <code>crossbar/echo</code> is a
+             built-in model that answers without calling any upstream, so the whole path &mdash;
+             routing, streaming, usage accounting &mdash; works before you have an account with anyone.
+             It is free and cannot spend money.</p>
+          <div class="codewrap"><button class="copy" data-copy="c1">Copy</button><pre id="c1">curl https://crossbar-eta.vercel.app/v1/chat/completions   -H <span class="s">"Authorization: Bearer DEMO_KEY"</span>   -H <span class="s">'content-type: application/json'</span>   -d <span class="s">'{"model":"crossbar/echo","messages":[{"role":"user","content":"hello"}]}'</span></pre></div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h4>Point an existing client at it</h4>
+          <p>crossbar speaks the OpenAI Chat Completions API, so any OpenAI client works &mdash;
+             change the base URL and the key, nothing else.</p>
+          <div class="tabs" id="tabs">
+            <button class="tab" data-lang="py" aria-selected="true">Python</button>
+            <button class="tab" data-lang="js" aria-selected="false">Node</button>
+            <button class="tab" data-lang="sh" aria-selected="false">curl</button>
+          </div>
+          <div class="codewrap"><button class="copy" data-copy="c2">Copy</button><pre id="c2"></pre></div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h4>Add provider keys to reach real models</h4>
+          <p>To route to <code>anthropic/claude-opus-5</code> or <code>openai/gpt-5</code>, the gateway
+             needs credentials for those providers. Run it yourself and they stay on your machine:</p>
+          <div class="codewrap"><button class="copy" data-copy="c3">Copy</button><pre id="c3">git clone https://github.com/Keugene11/crossbar &amp;&amp; cd crossbar
+pnpm install
+
+<span class="c"># your provider keys, never crossbar's</span>
+echo <span class="s">"ANTHROPIC_API_KEY=sk-ant-..."</span> &gt;&gt; apps/gateway/.env
+echo <span class="s">"CROSSBAR_API_KEYS=sk-my-own-key"</span> &gt;&gt; apps/gateway/.env
+
+pnpm dev   <span class="c"># http://localhost:8080</span></pre></div>
+          <p class="hint">The hosted demo above has no provider keys configured, so real models there
+             return <code>401</code> from the provider &mdash; you will see the routing worked and the
+             credentials were missing, which is the honest failure.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="play" style="background:var(--bg-soft);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)">
+  <div class="wrap">
+    <div class="shead"><div><h2>Playground</h2><p>Runs against this live gateway. Watch the routing headers change with the model you pick.</p></div></div>
+
+    <div class="pg">
+      <div class="panel">
+        <div class="field">
+          <label for="pg-model">Model</label>
+          <select id="pg-model"></select>
+        </div>
+        <div class="field">
+          <label for="pg-key">API key</label>
+          <input id="pg-key" spellcheck="false" placeholder="sk-...">
+        </div>
+        <div class="field">
+          <label for="pg-prompt">Message</label>
+          <textarea id="pg-prompt" rows="5">Explain what an LLM routing gateway does, briefly.</textarea>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="pg-send">Send</button>
+          <label class="hint" style="margin:0"><input type="checkbox" id="pg-stream" checked style="width:auto;vertical-align:-2px"> stream</label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label style="display:block;font-size:12px;color:var(--dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Response</label>
+        <div class="out" id="pg-out">Press Send.</div>
+        <div class="meta" id="pg-meta"></div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section id="models">
   <div class="wrap">
@@ -355,6 +487,7 @@ async function load() {
   PROVIDERS = p.data || [];
   renderStats();
   renderChips();
+  fillModels();
   render();
   renderProviders();
   health();
@@ -543,6 +676,157 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeDrawer();
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
 });
+
+
+/* ---------------- quickstart ---------------- */
+const DEMO_KEY = "sk-crossbar-demo-free";
+const HOST = location.origin;
+
+const SNIPPETS = {
+  py: `from openai import OpenAI
+
+client = OpenAI(
+    base_url="${HOST}/v1",
+    api_key="${DEMO_KEY}",
+)
+
+r = client.chat.completions.create(
+    model="crossbar/echo",
+    messages=[{"role": "user", "content": "hello"}],
+)
+print(r.choices[0].message.content)`,
+  js: `import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "${HOST}/v1",
+  apiKey: "${DEMO_KEY}",
+});
+
+const r = await client.chat.completions.create({
+  model: "crossbar/echo",
+  messages: [{ role: "user", content: "hello" }],
+});
+console.log(r.choices[0].message.content);`,
+  sh: `curl ${HOST}/v1/chat/completions \
+  -H "Authorization: Bearer ${DEMO_KEY}" \
+  -H 'content-type: application/json' \
+  -d '{"model":"crossbar/echo","messages":[{"role":"user","content":"hello"}]}'`,
+};
+
+function showSnippet(lang) {
+  $("#c2").textContent = SNIPPETS[lang];
+  for (const t of document.querySelectorAll("#tabs .tab")) {
+    t.setAttribute("aria-selected", String(t.dataset.lang === lang));
+  }
+}
+$("#tabs").onclick = (e) => { const t = e.target.closest(".tab"); if (t) showSnippet(t.dataset.lang); };
+showSnippet("py");
+
+/* The demo key is public by design: it is restricted to zero-cost endpoints,
+   so publishing it cannot cost anyone anything. */
+$("#c1").innerHTML = $("#c1").innerHTML.replace("DEMO_KEY", DEMO_KEY);
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".copy");
+  if (!b) return;
+  try {
+    await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent);
+    b.textContent = "Copied";
+    setTimeout(() => (b.textContent = "Copy"), 1400);
+  } catch { b.textContent = "Press ctrl+C"; }
+});
+
+/* ---------------- playground ---------------- */
+$("#pg-key").value = DEMO_KEY;
+
+function fillModels() {
+  const free = MODELS.filter((m) => (m.endpoints || []).some((e) => Number(e.pricing.prompt) === 0));
+  const paid = MODELS.filter((m) => !free.includes(m) && (m.endpoints || []).length);
+  $("#pg-model").innerHTML =
+    `<optgroup label="Free — work with the demo key">` +
+      free.map((m) => `<option value="${esc(m.id)}">${esc(m.id)}</option>`).join("") +
+    `</optgroup><optgroup label="Paid — need your own key and provider credentials">` +
+      paid.map((m) => `<option value="${esc(m.id)}">${esc(m.id)}</option>`).join("") +
+    `</optgroup>`;
+}
+
+function explain(status, body) {
+  const code = body?.error?.code;
+  if (status === 402) return "This key only reaches free models. Pick crossbar/echo, or use your own key with provider credentials configured.";
+  if (code === "authentication") return "Routing worked — the gateway reached the provider, which rejected its credentials. This demo has no provider keys. Run crossbar yourself with your own to reach real models.";
+  if (status === 401) return "The gateway rejected this key. The demo key is prefilled above.";
+  if (status === 429) return "Rate limited. This deployment allows 120 requests a minute per key.";
+  return null;
+}
+
+$("#pg-send").onclick = async () => {
+  const out = $("#pg-out"), meta = $("#pg-meta"), btn = $("#pg-send");
+  const stream = $("#pg-stream").checked;
+
+  btn.disabled = true; btn.textContent = "Sending…";
+  out.className = "out cursor"; out.textContent = ""; meta.innerHTML = "";
+
+  try {
+    const res = await fetch(HOST + "/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + $("#pg-key").value.trim() },
+      body: JSON.stringify({
+        model: $("#pg-model").value,
+        stream,
+        stream_options: stream ? { include_usage: true } : undefined,
+        messages: [{ role: "user", content: $("#pg-prompt").value }],
+      }),
+    });
+
+    const h = (n) => res.headers.get("x-crossbar-" + n);
+    const chips = [
+      ["provider", h("provider")], ["upstream model", h("model")],
+      ["attempts", h("attempts")], ["generation", h("generation-id")?.slice(0, 18)],
+    ].filter(([, v]) => v);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      out.className = "out err";
+      const why = explain(res.status, body);
+      out.textContent = (why ? why + "\n\n" : "") + JSON.stringify(body, null, 2);
+    } else if (stream) {
+      let usage = null;
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const p = line.slice(6).trim();
+          if (p === "[DONE]") continue;
+          const j = JSON.parse(p);
+          if (j.usage) usage = j.usage;
+          const d = j.choices?.[0]?.delta?.content;
+          if (d) out.textContent += d;
+        }
+      }
+      out.className = "out";
+      if (usage) chips.push(["tokens", `${usage.prompt_tokens}→${usage.completion_tokens}`], ["cost", "$" + (usage.cost ?? 0).toFixed(6)]);
+    } else {
+      const j = await res.json();
+      out.className = "out";
+      out.textContent = j.choices?.[0]?.message?.content ?? JSON.stringify(j, null, 2);
+      if (j.usage) chips.push(["tokens", `${j.usage.prompt_tokens}→${j.usage.completion_tokens}`], ["cost", "$" + (j.usage.cost ?? 0).toFixed(6)]);
+    }
+
+    meta.innerHTML = chips.map(([k, v]) => `<span>${esc(k)} <b>${esc(v)}</b></span>`).join("");
+  } catch (err) {
+    out.className = "out err";
+    out.textContent = "Request failed: " + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Send";
+  }
+};
 
 load().catch((e) => { $("#list").innerHTML = `<div class="empty">Could not load the catalog: ${esc(e.message)}</div>`; });
 </script>

@@ -39,8 +39,12 @@ export function bearerToken(header: string | undefined): string | undefined {
   return m?.[1]?.trim() || undefined;
 }
 
+export type KeyTier = "full" | "free";
+
 export interface AuthVariables {
   keyId: string | null;
+  /** "free" keys may only reach zero-cost endpoints. */
+  tier: KeyTier;
 }
 
 /**
@@ -52,18 +56,26 @@ export interface AuthVariables {
  *
  * An empty allowlist disables auth, which is what local dev and tests want.
  */
-export function auth(apiKeys: string[]): MiddlewareHandler<{ Variables: AuthVariables }> {
+export function auth(
+  apiKeys: string[],
+  freeApiKeys: string[] = [],
+): MiddlewareHandler<{ Variables: AuthVariables }> {
   const allowed = apiKeys.map(digest);
-  const keyIds = new Map(apiKeys.map((k) => [k, keyIdFor(k)]));
+  const free = freeApiKeys.map(digest);
+  const keyIds = new Map([...apiKeys, ...freeApiKeys].map((k) => [k, keyIdFor(k)]));
 
   return async (c, next) => {
-    if (apiKeys.length === 0) {
+    if (apiKeys.length === 0 && freeApiKeys.length === 0) {
       c.set("keyId", null);
+      c.set("tier", "full");
       return next();
     }
 
     const token = bearerToken(c.req.header("authorization"));
-    if (!token || !constantTimeIncludes(token, allowed)) {
+    const isFree = Boolean(token) && constantTimeIncludes(token!, free);
+    const isFull = Boolean(token) && constantTimeIncludes(token!, allowed);
+
+    if (!token || (!isFree && !isFull)) {
       throw new CrossbarError({
         status: 401,
         code: "authentication",
@@ -73,6 +85,8 @@ export function auth(apiKeys: string[]): MiddlewareHandler<{ Variables: AuthVari
     }
 
     c.set("keyId", keyIds.get(token) ?? keyIdFor(token));
+    // A key in both lists gets the broader tier; the free list is a floor.
+    c.set("tier", isFull ? "full" : "free");
     return next();
   };
 }

@@ -200,3 +200,96 @@ describe("rate limiting", () => {
     expect(bob.status).toBe(200);
   });
 });
+
+describe("free-tier keys", () => {
+  const FREE_SEED = [
+    {
+      id: "free/demo",
+      name: "Free demo",
+      contextLength: 100_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      endpoints: [
+        {
+          provider: "anthropic",
+          upstreamModelId: "cheap-anthropic",
+          pricePrompt: 0,
+          priceCompletion: 0,
+          maxOutputTokens: 4096,
+        },
+      ],
+    },
+    {
+      id: "paid/model",
+      name: "Paid",
+      contextLength: 100_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      endpoints: [
+        {
+          provider: "openai",
+          upstreamModelId: "pricey-openai",
+          pricePrompt: 9,
+          priceCompletion: 9,
+          maxOutputTokens: 4096,
+        },
+      ],
+    },
+  ];
+
+  it("reaches a zero-cost model", async () => {
+    harness = await createHarness({ seed: FREE_SEED, freeApiKeys: ["sk-free"] });
+    const res = await postChat(
+      harness.app,
+      { model: "free/demo", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-free" },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("cannot spend money, even by asking for a paid model directly", async () => {
+    // The restriction runs through the same price filter as any other
+    // constraint, so there is no second code path that could disagree.
+    harness = await createHarness({ seed: FREE_SEED, freeApiKeys: ["sk-free"] });
+    const res = await postChat(
+      harness.app,
+      { model: "paid/model", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-free" },
+    );
+
+    expect(res.status).toBe(402);
+    expect(harness.openai.received).toHaveLength(0);
+  });
+
+  it("cannot reach a paid model through the fallback chain either", async () => {
+    harness = await createHarness({ seed: FREE_SEED, freeApiKeys: ["sk-free"] });
+    const res = await postChat(
+      harness.app,
+      {
+        model: "free/demo",
+        models: ["paid/model"],
+        messages: [{ role: "user", content: "hi" }],
+        provider: { max_price: { prompt: 100 } },
+      },
+      { authorization: "Bearer sk-free" },
+    );
+    expect(res.status).toBe(200);
+    // Served by the free endpoint; the paid one was filtered out of the plan.
+    expect(res.headers.get("x-crossbar-provider")).toBe("anthropic");
+    expect(harness.openai.received).toHaveLength(0);
+  });
+
+  it("a full key still reaches paid models", async () => {
+    harness = await createHarness({
+      seed: FREE_SEED,
+      apiKeys: ["sk-full"],
+      freeApiKeys: ["sk-free"],
+    });
+    const res = await postChat(
+      harness.app,
+      { model: "paid/model", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-full" },
+    );
+    expect(res.status).toBe(200);
+  });
+});
