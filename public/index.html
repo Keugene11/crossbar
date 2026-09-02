@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crossbar</title>
+<style>
+  :root { color-scheme: light dark; --fg:#111; --dim:#666; --bg:#fafafa; --card:#fff; --line:#e5e5e5; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e8e8e8; --dim:#999; --bg:#0d0d0d; --card:#161616; --line:#2a2a2a; --accent:#6ea8ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:3rem 1.25rem; background:var(--bg); color:var(--fg);
+         font:15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size:1.9rem; margin:0 0 .25rem; letter-spacing:-.02em; }
+  .sub { color:var(--dim); margin:0 0 2rem; }
+  h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+       margin:2.25rem 0 .75rem; font-weight:600; }
+  pre, code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:8px;
+        padding:1rem; overflow-x:auto; font-size:13px; margin:0; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td { padding:.5rem .75rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { white-space:nowrap; font-family:ui-monospace,monospace; font-size:13px; }
+  td:last-child { color:var(--dim); }
+  a { color:var(--accent); }
+  .note { border-left:3px solid var(--line); padding:.1rem 0 .1rem 1rem; color:var(--dim); font-size:14px; }
+  footer { margin-top:3rem; padding-top:1.25rem; border-top:1px solid var(--line);
+           color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>crossbar</h1>
+  <p class="sub">An OpenRouter-style LLM routing gateway. One API key, one wire format, many providers, with policy routing and failover.</p>
+
+  <p>Speak the OpenAI Chat Completions API, name a model as <code>provider/model</code>, and crossbar picks an upstream endpoint by policy, translates into that provider's native dialect, streams the response back re-normalized, cascades to the next candidate on failure, and books tokens and cost.</p>
+
+  <h2>Try it</h2>
+  <pre>curl https://crossbar.vercel.app/v1/models \
+  -H "Authorization: Bearer $CROSSBAR_KEY"</pre>
+
+  <h2>Endpoints</h2>
+  <table>
+    <tr><td>POST /v1/chat/completions</td><td>Completions, buffered or streaming</td></tr>
+    <tr><td>POST /v1/completions</td><td>Legacy text completions</td></tr>
+    <tr><td>GET&nbsp; /v1/models</td><td>Catalog with per-endpoint pricing</td></tr>
+    <tr><td>GET&nbsp; /v1/providers</td><td>Providers and their data-retention policy</td></tr>
+    <tr><td>GET&nbsp; /v1/generation?id=</td><td>Tokens, cost, and the full attempt list</td></tr>
+    <tr><td>GET&nbsp; /v1/key</td><td>This key's usage and rate limit</td></tr>
+    <tr><td>GET&nbsp; /v1/activity</td><td>Daily usage by model and provider</td></tr>
+    <tr><td>GET&nbsp; /health</td><td>Liveness and readiness (no auth)</td></tr>
+  </table>
+
+  <h2>Routing</h2>
+  <p>With no <code>sort</code> given, endpoints that failed in the last 30&nbsp;seconds are deprioritised, then the rest are ordered by inverse-square price weighting — a $1/MTok endpoint is roughly 9&times; more likely to be tried first than a $3/MTok one. Whatever remains becomes the fallback chain.</p>
+  <p>One invariant shapes the cascade: <strong>once a byte reaches the client, no other endpoint can be tried.</strong> Failures before the first chunk fall through to the next candidate; failures after it become a terminal frame inside the open stream, never a silently truncated answer.</p>
+
+  <h2>This deployment</h2>
+  <p class="note">Runs in stateless mode: the catalog is compiled in and the ledger lives in memory for the life of the instance, so <code>/v1/generation</code> and <code>/v1/activity</code> only see traffic from the instance that served it. No upstream provider keys are configured here, so chat requests reach the provider and come back <code>401</code> — the routing, translation, failover and accounting paths are all real, the credentials are not.</p>
+
+  <footer>
+    <a href="https://github.com/Keugene11/crossbar">github.com/Keugene11/crossbar</a> &middot; MIT
+  </footer>
+</main>
+</body>
+</html>

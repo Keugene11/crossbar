@@ -1,15 +1,13 @@
 import { createApp, type App, type AppDeps } from "./app.js";
 import { config, type Config } from "./config.js";
-import { createDb, type DbHandle } from "./db/client.js";
-import { seedCatalog } from "./db/seed.js";
 import { AnthropicAdapter } from "./providers/anthropic/index.js";
 import { OpenAIAdapter } from "./providers/openai/index.js";
 import { ProviderRegistry } from "./providers/types.js";
 import { Catalog, staticSource, type Endpoint, type Model, type Provider } from "./registry/catalog.js";
+import type { DbHandle } from "./db/client.js";
 import { catalogSeed, endpointId, providerSeed, toMicro } from "./registry/seed.js";
 import { StatsTracker } from "./routing/stats.js";
 import { MemoryStore } from "./store/memory.js";
-import { PostgresStore } from "./store/postgres.js";
 import type { GenerationStore } from "./store/types.js";
 
 /**
@@ -114,8 +112,21 @@ export async function bootstrapStateless(cfg: Config = config): Promise<Bootstra
   return { app, store, catalog, db: undefined, close: async () => {} };
 }
 
-/** Durable: Postgres when DATABASE_URL is set, embedded PGlite otherwise. */
+/**
+ * Durable: Postgres when DATABASE_URL is set, embedded PGlite otherwise.
+ *
+ * The database modules are imported dynamically so the stateless path never
+ * loads them. That is not micro-optimisation: PGlite ships a multi-megabyte
+ * WASM payload that a serverless bundle would otherwise carry and a cold start
+ * would otherwise pay for, to reach code that cannot run there anyway.
+ */
 export async function bootstrapDurable(cfg: Config = config): Promise<Bootstrapped> {
+  const [{ createDb }, { seedCatalog }, { PostgresStore }] = await Promise.all([
+    import("./db/client.js"),
+    import("./db/seed.js"),
+    import("./store/postgres.js"),
+  ]);
+
   const handle = createDb({ url: cfg.databaseUrl ?? cfg.pgliteDir });
   await handle.migrate();
 

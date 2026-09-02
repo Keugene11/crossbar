@@ -1,0 +1,16 @@
+{
+  "//": "Root config for the serverless entrypoint. Vercel type-checks api/**/*.ts with the nearest tsconfig, and its defaults predate Error cause and Object.hasOwn -- both of which the gateway source uses.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "noEmit": true
+  },
+  "include": ["api/**/*.ts"]
+}

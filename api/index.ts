@@ -1,4 +1,3 @@
-import { handle } from "hono/vercel";
 import { bootstrapStateless } from "../apps/gateway/src/bootstrap.js";
 
 export const config = { runtime: "nodejs" };
@@ -6,30 +5,27 @@ export const config = { runtime: "nodejs" };
 /**
  * Serverless entrypoint.
  *
+ * Exports Web-standard `Request -> Response` handlers, which the Node runtime
+ * supports directly -- no framework adapter in between, so streaming responses
+ * pass through untouched.
+ *
  * Bootstrapping is memoised per instance rather than per request: a cold start
  * pays for it once and every warm invocation reuses it. Stateless by
- * construction -- there is no writable disk here for an embedded database, and
- * no connection worth pooling, so the catalog is compiled in and the ledger
- * lives in memory for the life of the instance.
+ * construction, since there is no writable disk here for an embedded database
+ * and no connection worth pooling.
  */
 let cached: Promise<Awaited<ReturnType<typeof bootstrapStateless>>> | undefined;
 
-function instance() {
+async function dispatch(request: Request): Promise<Response> {
   cached ??= bootstrapStateless();
-  return cached;
+  const { app } = await cached;
+  return app.fetch(request);
 }
 
-async function dispatch(req: Request): Promise<Response> {
-  const { app } = await instance();
-  return app.fetch(req);
-}
-
-const handler = handle({ fetch: dispatch } as never);
-
-export const GET = handler;
-export const POST = handler;
-export const PUT = handler;
-export const PATCH = handler;
-export const DELETE = handler;
-export const OPTIONS = handler;
-export default handler;
+export const GET = dispatch;
+export const POST = dispatch;
+export const PUT = dispatch;
+export const PATCH = dispatch;
+export const DELETE = dispatch;
+export const HEAD = dispatch;
+export const OPTIONS = dispatch;

@@ -13,5 +13,15 @@
     "db:migrate": "pnpm --filter @crossbar/gateway db:migrate",
     "db:seed": "pnpm --filter @crossbar/gateway db:seed",
     "db:generate": "pnpm --filter @crossbar/gateway db:generate"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.5",
+    "openai": "^7.8.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
   }
 }

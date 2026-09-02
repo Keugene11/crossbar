@@ -6,3 +6,5 @@ dist/
 .pglite/
 coverage/
 .DS_Store
+
+.vercel
