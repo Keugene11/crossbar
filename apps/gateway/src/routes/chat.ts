@@ -67,6 +67,18 @@ function header(value: string | undefined): string | null {
   return value.slice(0, 512);
 }
 
+/**
+ * The client's abort signal.
+ *
+ * Read through a structural cast because the serverless builder compiles this
+ * file against a lib whose `Request` has no `signal`. Losing it would be a
+ * silent regression -- it is what stops an upstream generation when the client
+ * hangs up -- so it is typed rather than dropped.
+ */
+function clientSignal(c: Context<AppEnv>): AbortSignal {
+  return (c.req.raw as unknown as { signal: AbortSignal }).signal;
+}
+
 function wantsUsage(request: ChatCompletionRequest): boolean {
   return request.usage?.include === true || request.stream_options?.include_usage === true;
 }
@@ -164,7 +176,7 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
           ttftTimeoutMs: deps.ttftTimeoutMs,
           attemptTimeoutMs: deps.attemptTimeoutMs,
         },
-        c.req.raw.signal,
+        clientSignal(c),
       );
     } catch (err) {
       const e = err instanceof CrossbarError ? err : undefined;
