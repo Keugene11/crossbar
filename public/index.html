@@ -334,6 +334,11 @@ footer a:hover { color: var(--fg); }
            the request into that provider's own format, and sends the answer back in the shape you
            already expect.</p>
 
+        <h3>One account instead of many</h3>
+        <p>The provider credentials sit on the gateway, not in your app. Whoever runs a crossbar
+           holds them once and issues keys with credit on them &mdash; so using it means a single key
+           and a single balance, not an account with every AI company.</p>
+
         <h3>If a provider fails, it tries the next</h3>
         <p>Rate limited, erroring, or slow — crossbar moves on to another endpoint mid-request, and
            your app just sees a normal reply. It picks the cheapest capable option by default, and
@@ -353,7 +358,7 @@ footer a:hover { color: var(--fg); }
 
           <rect class="box" x="4" y="104" width="96" height="52" rx="9"/>
           <text class="t" x="52" y="127" text-anchor="middle" font-size="13" font-weight="560">Your app</text>
-          <text class="td" x="52" y="143" text-anchor="middle" font-size="10.5">one API, one key</text>
+          <text class="td" x="52" y="143" text-anchor="middle" font-size="10.5">one key, one balance</text>
 
           <line class="flow" x1="104" y1="130" x2="152" y2="130" marker-end="url(#arwA)"/>
 
@@ -361,6 +366,7 @@ footer a:hover { color: var(--fg); }
           <text class="ta" x="208" y="122" text-anchor="middle" font-size="13.5" font-weight="640">crossbar</text>
           <text class="tm" x="208" y="138" text-anchor="middle" font-size="10">picks &#183; translates</text>
           <text class="tm" x="208" y="151" text-anchor="middle" font-size="10">retries &#183; meters</text>
+          <text class="td" x="208" y="180" text-anchor="middle" font-size="9.5">provider keys live here</text>
 
           <path class="flow" d="M264 116 C292 116 292 46 316 46" marker-end="url(#arwA)"/>
           <path class="fallback" d="M264 130 C292 130 292 130 316 130" marker-end="url(#arw)"/>
@@ -384,40 +390,47 @@ footer a:hover { color: var(--fg); }
       </div>
     </div>
 
-    <div class="shead" style="margin-top:44px"><div><h2>Do I need my own keys?</h2></div></div>
+    <div class="shead" style="margin-top:44px"><div><h2>Do I need my own keys?</h2><p>Depends which side of the gateway you are on.</p></div></div>
     <div class="faq">
       <div class="q">
-        <h4>Short answer: yes, for real models.</h4>
-        <p>crossbar doesn't sell access to models — it routes to providers <em>you</em> have accounts
-           with. It is the plumbing, not the supplier. So it needs your Anthropic or OpenAI key in
-           order to reach Claude or GPT on your behalf.</p>
-        <p>The one exception is <code>crossbar/echo</code>, a built-in demo model that answers
-           without calling anyone. It needs nothing, and it's what the playground uses.</p>
+        <h4>Using someone's crossbar? No.</h4>
+        <p>You get a key with credit on it and call any model in the catalog. You never need an
+           Anthropic or OpenAI account &mdash; that relationship belongs to whoever runs the gateway.
+           One key, one balance, every model. That is the whole point of a router.</p>
       </div>
 
       <div class="q">
-        <h4>There are two different kinds of key, which trips everyone up</h4>
+        <h4>Running crossbar? Yes, once.</h4>
+        <p>You hold the provider credentials, and hand out keys to everyone else:</p>
+        <div class="codewrap"><button class="copy" data-copy="c4">Copy</button><pre id="c4">curl -X POST $HOST/v1/keys   -H <span class="s">"Authorization: Bearer $OPERATOR_KEY"</span>   -d <span class="s">'{"label":"my app","credit":5}'</span>
+
+<span class="c"># -&gt; { "key": "sk-crossbar-...", "limit": 5 }</span>
+<span class="c">#    shown once; only its hash is stored</span></pre></div>
+        <p style="margin-top:12px">Every generation debits what it actually cost. A key that runs
+           out gets <code>402</code>; a request that failed is never charged. An issued key cannot
+           manage keys, so it cannot mint itself more credit.</p>
+      </div>
+
+      <div class="q">
+        <h4>The three kinds of key</h4>
         <div class="keytable">
+          <code>issued keys</code>
+          <span><b>Tenant keys.</b> Created with <code>POST /v1/keys</code>, carry a credit balance.
+            This is what you hand to an app or a teammate.</span>
           <code>CROSSBAR_API_KEYS</code>
-          <span><b>Your gateway's key.</b> Controls who is allowed to use your crossbar. You make
-            this one up. Clients send it as <code>Authorization: Bearer …</code>.</span>
+          <span><b>Operator keys.</b> From configuration, unlimited, unmetered. These can issue and
+            revoke tenant keys.</span>
           <code>ANTHROPIC_API_KEY</code>
-          <span><b>A provider key.</b> Lets crossbar reach Claude. Stays on your server; clients
-            never see it.</span>
-          <code>OPENAI_API_KEY</code>
-          <span><b>A provider key.</b> Same idea, for GPT.</span>
+          <span><b>Provider keys.</b> Let crossbar reach Claude and GPT. Set once by the operator,
+            never seen by anyone using the gateway.</span>
         </div>
-        <p style="margin-top:12px">Clients only ever hold the first one. That's the point: you can
-           hand out or revoke gateway keys per app without ever exposing the provider credentials
-           behind them.</p>
       </div>
 
       <div class="q">
         <h4>What about this hosted demo?</h4>
         <p>It has <em>no</em> provider keys configured, so <code>crossbar/echo</code> works and real
            models come back <code>401</code> from the provider. That failure is honest: routing and
-           translation ran, the credentials simply weren't there. Run it yourself with your own keys
-           to reach real models — they never leave your machine.</p>
+           translation ran, the credentials simply weren't there.</p>
       </div>
     </div>
   </div>
