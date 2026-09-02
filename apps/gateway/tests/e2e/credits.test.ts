@@ -158,3 +158,77 @@ describe("key management is operator-only", () => {
     }
   });
 });
+
+describe("topping up", () => {
+  it("adds credit to a key that has run down", async () => {
+    // A balance is a running account, not a number fixed at issue time.
+    harness = await createHarness({ apiKeys: [OPERATOR] });
+    const { data } = await issue(harness, 0);
+
+    const blocked = await postChat(
+      harness.app,
+      { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+      { authorization: `Bearer ${data.key}` },
+    );
+    expect(blocked.status).toBe(402);
+
+    const top = await harness.app.request(`/v1/keys/${data.id}/credit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${OPERATOR}` },
+      body: JSON.stringify({ amount: 3 }),
+    });
+    expect(top.status).toBe(200);
+    expect(((await top.json()) as any).data.limit).toBe(3);
+
+    const ok = await postChat(
+      harness.app,
+      { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+      { authorization: `Bearer ${data.key}` },
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("accumulates rather than replacing", async () => {
+    harness = await createHarness({ apiKeys: [OPERATOR] });
+    const { data } = await issue(harness, 2);
+
+    for (const amount of [3, 5]) {
+      await harness.app.request(`/v1/keys/${data.id}/credit`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${OPERATOR}` },
+        body: JSON.stringify({ amount }),
+      });
+    }
+
+    const credits = (await (
+      await harness.app.request("/v1/credits", { headers: { authorization: `Bearer ${data.key}` } })
+    ).json()) as any;
+    expect(credits.data.limit_remaining).toBe(10);
+  });
+
+  it("cannot be reached by the key it would credit", async () => {
+    harness = await createHarness({ apiKeys: [OPERATOR] });
+    const { data } = await issue(harness, 1);
+
+    const res = await harness.app.request(`/v1/keys/${data.id}/credit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${data.key}` },
+      body: JSON.stringify({ amount: 9999 }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects a nonsense amount", async () => {
+    harness = await createHarness({ apiKeys: [OPERATOR] });
+    const { data } = await issue(harness, 1);
+
+    for (const body of [{ amount: 0 }, { amount: -5 }, {}]) {
+      const res = await harness.app.request(`/v1/keys/${data.id}/credit`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${OPERATOR}` },
+        body: JSON.stringify(body),
+      });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+});

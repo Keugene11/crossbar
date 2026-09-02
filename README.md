@@ -32,8 +32,15 @@ curl -X POST localhost:8080/v1/keys   -H "Authorization: Bearer $OPERATOR_KEY"  
 ```
 
 Each generation debits its real cost from that balance; a key that runs out gets
-`402`, and one that fails is never charged. `GET /v1/credits` reports the
-balance. An issued key cannot manage keys, so it cannot mint itself more credit.
+`402`, and one that fails is never charged. Top it back up with
+`POST /v1/keys/:id/credit {"amount": 10}`, and read the balance from
+`GET /v1/credits`. An issued key cannot manage keys, so it cannot mint itself
+more credit.
+
+**What is not here: payment.** Credit is *granted* by an operator, not bought.
+There is no checkout, no card, no invoice — wiring that up is a Stripe
+integration and a business, not a routing problem. Everything downstream of
+"a balance exists" is built and metered; putting money into one is not.
 
 So the two kinds of key are:
 
@@ -100,6 +107,7 @@ by changing the host alone.
 | `GET /v1/key` | The calling key's own usage and rate limit |
 | `GET /v1/credits` | Credit granted, used and remaining |
 | `POST/GET/DELETE /v1/keys` | Issue, list and revoke tenant keys (operator only) |
+| `POST /v1/keys/:id/credit` | Top up a key's balance (operator only) |
 | `GET /v1/providers` | Provider directory with data-retention policy |
 | `GET /v1/activity?days=` | Daily usage rolled up by model and provider |
 | `GET /health` | Liveness (no auth) |

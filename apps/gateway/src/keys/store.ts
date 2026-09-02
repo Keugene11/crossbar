@@ -27,6 +27,8 @@ export interface KeyStore {
   /** Add to the spend counter. Never throws into the request path. */
   debit(id: string, micro: number): Promise<void>;
   create(opts: { label?: string; creditMicro?: number | null }): Promise<{ key: string; issued: IssuedKey }>;
+  /** Add credit to an existing key. Returns the updated key, or undefined. */
+  topUp(id: string, micro: number): Promise<IssuedKey | undefined>;
   list(): Promise<IssuedKey[]>;
   revoke(id: string): Promise<boolean>;
 }
@@ -88,6 +90,17 @@ export class PostgresKeyStore implements KeyStore {
     return { key, issued: toIssued(row) };
   }
 
+  async topUp(id: string, micro: number): Promise<IssuedKey | undefined> {
+    // Incremented in SQL like spend, so a top-up racing a charge cannot lose
+    // either one.
+    const [row] = await this.db
+      .update(apiKeys)
+      .set({ creditMicro: sql`coalesce(${apiKeys.creditMicro}, 0) + ${micro}` })
+      .where(eq(apiKeys.id, id))
+      .returning();
+    return row ? toIssued(row) : undefined;
+  }
+
   async list(): Promise<IssuedKey[]> {
     return (await this.db.select().from(apiKeys)).map(toIssued);
   }
@@ -147,6 +160,15 @@ export class MemoryKeyStore implements KeyStore {
     };
     this.#byHash.set(hash, issued);
     return { key, issued };
+  }
+
+  async topUp(id: string, micro: number): Promise<IssuedKey | undefined> {
+    for (const k of this.#byHash.values()) {
+      if (k.id !== id) continue;
+      k.creditMicro = (k.creditMicro ?? 0) + micro;
+      return k;
+    }
+    return undefined;
   }
 
   async list(): Promise<IssuedKey[]> {

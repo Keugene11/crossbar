@@ -5,6 +5,8 @@ import { microToUsd } from "../accounting/cost.js";
 import { CrossbarError } from "../errors.js";
 import { remainingMicro, type IssuedKey } from "../keys/store.js";
 
+const TopUp = z.object({ amount: z.number().positive().max(1_000_000) }).strict();
+
 const CreateKey = z
   .object({
     label: z.string().max(120).optional(),
@@ -80,6 +82,36 @@ export function registerKeyAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
 
     // The only time the key itself is ever returned; only its hash is stored.
     return c.json({ data: { ...serialize(issued), key } }, 201);
+  });
+
+  // Top up an existing key. Separate from creation because a balance is a
+  // running account, not something fixed at issue time -- and because "add
+  // credit" must never be reachable by the key it is adding credit to.
+  app.post("/keys/:id/credit", async (c) => {
+    requireOperator(c);
+    const parsed = TopUp.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw new CrossbarError({
+        status: 400,
+        code: "invalid_request",
+        message: "Body must be { \"amount\": <USD greater than 0> }",
+        retryable: false,
+      });
+    }
+
+    const updated = await store().topUp(
+      c.req.param("id"),
+      Math.round(parsed.data.amount * 1_000_000),
+    );
+    if (!updated) {
+      throw new CrossbarError({
+        status: 404,
+        code: "not_found",
+        message: `No such key: "${c.req.param("id")}"`,
+        retryable: false,
+      });
+    }
+    return c.json({ data: serialize(updated) });
   });
 
   app.get("/keys", async (c) => {
