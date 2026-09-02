@@ -34,14 +34,30 @@ function partsToBlocks(content: string | ContentPart[]): ContentBlockParam[] {
   if (typeof content === "string") {
     return content.length ? [{ type: "text", text: content }] : [];
   }
-  return content.map((p) => (p.type === "text" ? { type: "text", text: p.text } : imageBlock(p)));
+  return content.map((p) =>
+    p.type === "text"
+      ? {
+          type: "text",
+          text: p.text,
+          // Cache breakpoints are placed by the caller and passed through
+          // untouched; only they know which prefix of their prompt is stable.
+          ...(p.cache_control ? { cache_control: p.cache_control } : {}),
+        }
+      : imageBlock(p),
+  );
 }
 
-function textParts(content: string | Array<{ type: "text"; text: string }>): TextBlockParam[] {
+function textParts(
+  content: string | Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>,
+): TextBlockParam[] {
   if (typeof content === "string") {
     return content.length ? [{ type: "text", text: content }] : [];
   }
-  return content.map((p) => ({ type: "text", text: p.text }));
+  return content.map((p) => ({
+    type: "text",
+    text: p.text,
+    ...(p.cache_control ? { cache_control: p.cache_control } : {}),
+  }));
 }
 
 /**

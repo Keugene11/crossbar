@@ -34,6 +34,16 @@ export function filterEndpoints(
     const deny = new Set(prefs.ignore);
     out = out.filter((e) => !deny.has(e.provider));
   }
+  // A privacy constraint, so it removes rather than deprioritises: routing to
+  // a provider that may train on the prompt would violate the caller's intent
+  // even if every alternative is down.
+  if (prefs.data_collection === "deny") {
+    out = out.filter((e) => e.dataCollection === "deny");
+  }
+  if (prefs.quantizations?.length) {
+    const allowed = new Set(prefs.quantizations);
+    out = out.filter((e) => e.quantization !== null && allowed.has(e.quantization));
+  }
   if (prefs.max_price) {
     const { prompt, completion } = prefs.max_price;
     out = out.filter(

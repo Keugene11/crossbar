@@ -50,6 +50,7 @@ by changing the host alone.
 | `GET /v1/models/:author/:slug/endpoints` | Endpoint-level detail for one model |
 | `GET /v1/generation?id=` | Tokens, cost, latency, and the full attempt list |
 | `GET /v1/key` | The calling key's own usage and rate limit |
+| `GET /v1/providers` | Provider directory with data-retention policy |
 | `GET /health` | Liveness (no auth) |
 
 Beyond the OpenAI request body, crossbar accepts:
@@ -57,7 +58,8 @@ Beyond the OpenAI request body, crossbar accepts:
 - **`models: string[]`** — model-level fallback chain, tried in order once the
   primary model's endpoints are exhausted.
 - **`provider`** — routing preferences: `order`, `sort` (`price` /
-  `throughput` / `latency`), `allow_fallbacks`, `only`, `ignore`, `max_price`.
+  `throughput` / `latency`), `allow_fallbacks`, `only`, `ignore`, `max_price`,
+  `require_parameters`, `data_collection`, `quantizations`.
 - **`usage: { include: true }`** — force usage accounting into the final chunk.
 - **Variant suffixes** — `anthropic/claude-opus-5:floor` routes cheapest-first,
   `:nitro` routes by throughput. Sugar over `provider.sort`; an explicit `sort`
@@ -67,6 +69,10 @@ Beyond the OpenAI request body, crossbar accepts:
   something the request depends on. Without it, a tool-calling request can land
   on an endpoint that ignores `tools` and answers in prose.
 - **`HTTP-Referer` / `X-Title`** — app attribution, recorded per generation.
+- **`cache_control`** on any text part — a prompt-cache breakpoint, passed
+  through to providers that support caching. Placement stays the caller's
+  decision, because it depends on which prefix of *their* prompt is stable,
+  which the gateway cannot know. Cache reads then bill at the cache rate.
 - **`cost_tier` / `allowed_models`** — spend ceiling and allowlist for the auto
   router.
 - **`transforms: ["middle-out"]`** — compress an over-long prompt to fit instead
@@ -125,6 +131,15 @@ Failure handling is per-status, because not every failure means the same thing:
 
 Credentials are a property of the provider account, not the request, so one
 expired key retires that provider for the request instead of failing it.
+
+**Policy routing.** `provider.data_collection: "deny"` routes only to endpoints
+that do not retain or train on prompts, and `provider.quantizations` restricts
+to named weight formats (a heavily quantized variant can underperform the same
+model served elsewhere). Both *remove* candidates rather than deprioritise them:
+a privacy or quality constraint the router quietly ignores when everything else
+is down is not a constraint. `/v1/providers` publishes the retention policy each
+one is filtered on — a routing control the caller cannot inspect is not much of
+a control.
 
 **Sizing.** Every candidate is checked against the request before it is tried:
 an endpoint whose context window cannot hold the prompt plus the requested
@@ -218,7 +233,7 @@ src/
 ## Tests
 
 ```bash
-pnpm test         # 144 tests, no network, no ports
+pnpm test         # 149 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```

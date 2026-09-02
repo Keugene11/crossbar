@@ -24,6 +24,16 @@ export const ProviderPreferences = z
       .optional(),
     /** Drop endpoints that cannot honour every parameter in the request. */
     require_parameters: z.boolean().default(false),
+    /**
+     * "deny" routes only to endpoints that do not retain or train on prompts.
+     * The default is "allow", meaning the caller expresses no preference.
+     */
+    data_collection: z.enum(["allow", "deny"]).default("allow"),
+    /**
+     * Restrict to endpoints serving these weight quantizations. A heavily
+     * quantized variant can underperform the same model served elsewhere.
+     */
+    quantizations: z.array(z.string().max(32)).max(16).optional(),
   })
   .strict();
 
@@ -32,4 +42,5 @@ export type ProviderPreferences = z.infer<typeof ProviderPreferences>;
 export const defaultProviderPreferences: ProviderPreferences = {
   allow_fallbacks: true,
   require_parameters: false,
+  data_collection: "allow",
 };

@@ -13,6 +13,7 @@ import { registerChatRoute } from "./routes/chat.js";
 import { registerGenerationRoute } from "./routes/generation.js";
 import { registerKeyRoute } from "./routes/key.js";
 import { registerModelRoutes } from "./routes/models.js";
+import { registerProviderRoutes } from "./routes/providers.js";
 
 /**
  * Largest request body accepted.
@@ -133,6 +134,7 @@ export function createApp(deps: AppDeps): App {
   registerChatRoute(v1, deps);
   registerGenerationRoute(v1, deps);
   registerKeyRoute(v1, deps);
+  registerProviderRoutes(v1, deps);
 
   app.route("/v1", v1);
   // OpenRouter serves its API under /api/v1; accepting both means a client can

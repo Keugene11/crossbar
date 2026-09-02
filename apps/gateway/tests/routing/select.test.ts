@@ -3,28 +3,16 @@ import type { Endpoint } from "../../src/registry/catalog.js";
 import { filterEndpoints, orderEndpoints, priceWeightedOrder } from "../../src/routing/select.js";
 import { StatsTracker } from "../../src/routing/stats.js";
 import { defaultProviderPreferences, type ProviderPreferences } from "../../src/schemas/routing.js";
+import { makeEndpoint } from "../fixtures.js";
 
 function ep(provider: string, usdPrompt: number, usdCompletion = usdPrompt): Endpoint {
-  return {
+  return makeEndpoint({
     id: `m::${provider}`,
-    modelId: "m",
     provider,
     upstreamModelId: `${provider}-model`,
-    baseUrl: null,
     pricePromptMicro: usdPrompt * 1_000_000,
     priceCompletionMicro: usdCompletion * 1_000_000,
-    priceCacheReadMicro: null,
-    priceCacheWriteMicro: null,
-    contextLength: 100_000,
-    maxOutputTokens: 4096,
-    supportsTools: true,
-    supportsStreaming: true,
-    supportsVision: false,
-    supportsReasoning: false,
-    unsupportedParams: [],
-    status: "active",
-    priority: 0,
-  };
+  });
 }
 
 const prefs = (o: Partial<ProviderPreferences> = {}): ProviderPreferences => ({
@@ -153,5 +141,43 @@ describe("outage deprioritisation", () => {
       "a",
       "b",
     ]);
+  });
+});
+
+describe("policy filters", () => {
+  it("data_collection:deny removes providers that may train on prompts", () => {
+    // A privacy constraint removes rather than deprioritises: routing to a
+    // training provider would violate the caller's intent even if every
+    // alternative is down.
+    const endpoints = [
+      makeEndpoint({ id: "m::trains", provider: "trains", dataCollection: "allow" }),
+      makeEndpoint({ id: "m::private", provider: "private", dataCollection: "deny" }),
+    ];
+
+    expect(
+      filterEndpoints(endpoints, prefs({ data_collection: "deny" })).map((e) => e.provider),
+    ).toEqual(["private"]);
+    // The default expresses no preference, so both stay.
+    expect(filterEndpoints(endpoints, prefs()).map((e) => e.provider)).toEqual([
+      "trains",
+      "private",
+    ]);
+  });
+
+  it("quantizations restricts to the named weight formats", () => {
+    const endpoints = [
+      makeEndpoint({ id: "m::a", provider: "a", quantization: "fp8" }),
+      makeEndpoint({ id: "m::b", provider: "b", quantization: "bf16" }),
+      makeEndpoint({ id: "m::c", provider: "c", quantization: null }),
+    ];
+
+    expect(
+      filterEndpoints(endpoints, prefs({ quantizations: ["bf16"] })).map((e) => e.provider),
+    ).toEqual(["b"]);
+    // An endpoint that publishes no quantization cannot be shown to satisfy
+    // the constraint, so it is excluded rather than assumed acceptable.
+    expect(
+      filterEndpoints(endpoints, prefs({ quantizations: ["fp8", "bf16"] })).map((e) => e.provider),
+    ).toEqual(["a", "b"]);
   });
 });

@@ -18,6 +18,42 @@ export interface SeedModel {
   endpoints: SeedEndpoint[];
 }
 
+export interface SeedProvider {
+  id: string;
+  name: string;
+  /** Whether prompts sent to this provider may be retained or trained on. */
+  mayTrainOnData: boolean;
+  privacyPolicyUrl?: string;
+  termsUrl?: string;
+  statusPageUrl?: string;
+}
+
+/**
+ * Provider policies as published for standard API access.
+ *
+ * Both providers state that API inputs are not used to train their models by
+ * default. Consumer and enterprise agreements differ -- verify against your
+ * own contract before relying on this for a compliance decision.
+ */
+export const providerSeed: SeedProvider[] = [
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    mayTrainOnData: false,
+    privacyPolicyUrl: "https://www.anthropic.com/legal/privacy",
+    termsUrl: "https://www.anthropic.com/legal/commercial-terms",
+    statusPageUrl: "https://status.anthropic.com",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    mayTrainOnData: false,
+    privacyPolicyUrl: "https://openai.com/policies/privacy-policy",
+    termsUrl: "https://openai.com/policies/business-terms",
+    statusPageUrl: "https://status.openai.com",
+  },
+];
+
 export interface SeedEndpoint {
   provider: string;
   upstreamModelId: string;
@@ -33,6 +69,10 @@ export interface SeedEndpoint {
   supportsReasoning?: boolean;
   /** Request fields this endpoint rejects; the adapter strips them. */
   unsupportedParams?: string[];
+  /** Weight quantization, when the provider publishes one. */
+  quantization?: string;
+  /** Whether prompts sent here may be retained or trained on. */
+  dataCollection?: "allow" | "deny";
   priority?: number;
 }
 

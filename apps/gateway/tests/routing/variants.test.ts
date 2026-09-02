@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { Endpoint } from "../../src/registry/catalog.js";
 import type { ChatCompletionRequest } from "../../src/schemas/openai.js";
 import { ChatCompletionRequest as RequestSchema } from "../../src/schemas/openai.js";
 import { defaultProviderPreferences } from "../../src/schemas/routing.js";
@@ -9,30 +8,7 @@ import {
   requiredCapabilities,
   supportsAll,
 } from "../../src/routing/variants.js";
-
-function endpoint(overrides: Partial<Endpoint> = {}): Endpoint {
-  return {
-    id: "m::p",
-    modelId: "m",
-    provider: "p",
-    upstreamModelId: "u",
-    baseUrl: null,
-    pricePromptMicro: 1_000_000,
-    priceCompletionMicro: 1_000_000,
-    priceCacheReadMicro: null,
-    priceCacheWriteMicro: null,
-    contextLength: 1000,
-    maxOutputTokens: 100,
-    supportsTools: true,
-    supportsStreaming: true,
-    supportsVision: false,
-    supportsReasoning: false,
-    unsupportedParams: [],
-    status: "active",
-    priority: 0,
-    ...overrides,
-  };
-}
+import { makeEndpoint as endpoint } from "../fixtures.js";
 
 const req = (body: Partial<ChatCompletionRequest>): ChatCompletionRequest =>
   RequestSchema.parse({ model: "a/b", messages: [{ role: "user", content: "hi" }], ...body });

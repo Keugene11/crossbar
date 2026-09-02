@@ -393,3 +393,92 @@ describe("middle-out transform", () => {
     await readSse(res);
   });
 });
+
+describe("provider directory and policy routing", () => {
+  it("lists providers with their data-retention policy", async () => {
+    harness = await createHarness();
+    const res = await harness.app.request("/v1/providers");
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as any;
+    const anthropic = body.data.find((p: any) => p.id === "anthropic");
+    expect(anthropic).toBeDefined();
+    expect(anthropic.may_train_on_data).toBe(false);
+    expect(anthropic.adapter_registered).toBe(true);
+    expect(anthropic.endpoint_count).toBeGreaterThan(0);
+  });
+
+  it("routes only to non-training endpoints under data_collection:deny", async () => {
+    harness = await createHarness({
+      seed: [
+        {
+          id: "policy/model",
+          name: "Policy test",
+          contextLength: 100_000,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          endpoints: [
+            {
+              provider: "anthropic",
+              upstreamModelId: "cheap-anthropic",
+              pricePrompt: 1,
+              priceCompletion: 1,
+              maxOutputTokens: 4096,
+              dataCollection: "allow",
+            },
+            {
+              provider: "openai",
+              upstreamModelId: "pricey-openai",
+              pricePrompt: 9,
+              priceCompletion: 9,
+              maxOutputTokens: 4096,
+              dataCollection: "deny",
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await postChat(harness.app, {
+      model: "policy/model",
+      messages: [{ role: "user", content: "sensitive" }],
+      provider: { data_collection: "deny" },
+    });
+
+    // The cheap endpoint trains on data, so the pricier private one wins.
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-crossbar-provider")).toBe("openai");
+    expect(harness.anthropic.received).toHaveLength(0);
+  });
+});
+
+describe("prompt caching passthrough", () => {
+  it("forwards cache_control breakpoints to the provider untouched", async () => {
+    harness = await createHarness();
+
+    await postChat(harness.app, {
+      model: "test/dual",
+      messages: [
+        {
+          role: "system",
+          content: [
+            { type: "text", text: "a long stable preamble", cache_control: { type: "ephemeral" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "cached context", cache_control: { type: "ephemeral" } },
+            { type: "text", text: "the volatile question" },
+          ],
+        },
+      ],
+    });
+
+    const sent = harness.anthropic.received[0]!.body as any;
+    expect(sent.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(sent.messages[0].content[0].cache_control).toEqual({ type: "ephemeral" });
+    // Placement is the caller's decision; nothing is added on their behalf.
+    expect(sent.messages[0].content[1].cache_control).toBeUndefined();
+  });
+});

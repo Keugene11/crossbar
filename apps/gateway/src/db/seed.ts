@@ -1,9 +1,32 @@
 import { getDb, type DB } from "./client.js";
-import { endpoints, models } from "./schema.js";
-import { catalogSeed, endpointId, toMicro, type SeedModel } from "../registry/seed.js";
+import { endpoints, models, providers } from "./schema.js";
+import {
+  catalogSeed,
+  endpointId,
+  providerSeed,
+  toMicro,
+  type SeedModel,
+  type SeedProvider,
+} from "../registry/seed.js";
 
 /** Idempotent upsert of the catalog. Safe to re-run after editing the seed. */
-export async function seedCatalog(db: DB, data: SeedModel[] = catalogSeed): Promise<void> {
+export async function seedCatalog(
+  db: DB,
+  data: SeedModel[] = catalogSeed,
+  providerData: SeedProvider[] = providerSeed,
+): Promise<void> {
+  for (const p of providerData) {
+    const row = {
+      id: p.id,
+      name: p.name,
+      mayTrainOnData: p.mayTrainOnData,
+      privacyPolicyUrl: p.privacyPolicyUrl ?? null,
+      termsUrl: p.termsUrl ?? null,
+      statusPageUrl: p.statusPageUrl ?? null,
+    };
+    await db.insert(providers).values(row).onConflictDoUpdate({ target: providers.id, set: row });
+  }
+
   for (const m of data) {
     const [author, ...rest] = m.id.split("/");
     const slug = rest.join("/");
@@ -50,6 +73,8 @@ export async function seedCatalog(db: DB, data: SeedModel[] = catalogSeed): Prom
         supportsVision: e.supportsVision ?? false,
         supportsReasoning: e.supportsReasoning ?? false,
         unsupportedParams: e.unsupportedParams ?? [],
+        quantization: e.quantization ?? null,
+        dataCollection: e.dataCollection ?? "deny",
         status: "active" as const,
         priority: e.priority ?? 0,
       };

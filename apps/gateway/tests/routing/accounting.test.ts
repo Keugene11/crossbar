@@ -1,31 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { costMicro, microToUsd } from "../../src/accounting/cost.js";
 import { toRow } from "../../src/accounting/record.js";
-import type { Endpoint } from "../../src/registry/catalog.js";
 import type { Usage } from "../../src/schemas/openai.js";
-
-function endpoint(usdPrompt: number, usdCompletion: number, usdCacheRead?: number): Endpoint {
-  return {
-    id: "m::p",
-    modelId: "m",
-    provider: "p",
-    upstreamModelId: "u",
-    baseUrl: null,
-    pricePromptMicro: usdPrompt * 1_000_000,
-    priceCompletionMicro: usdCompletion * 1_000_000,
-    priceCacheReadMicro: usdCacheRead === undefined ? null : usdCacheRead * 1_000_000,
-    priceCacheWriteMicro: null,
-    contextLength: 1000,
-    maxOutputTokens: 100,
-    supportsTools: true,
-    supportsStreaming: true,
-    supportsVision: false,
-    supportsReasoning: false,
-    unsupportedParams: [],
-    status: "active",
-    priority: 0,
-  };
-}
+import { pricedEndpoint as endpoint } from "../fixtures.js";
 
 function usage(prompt: number, completion: number, cached = 0, cacheWrite = 0): Usage {
   return {

@@ -26,8 +26,11 @@ function serializeEndpoint(e: Endpoint): Record<string, unknown> {
       streaming: e.supportsStreaming,
       vision: e.supportsVision,
       reasoning: e.supportsReasoning,
+      prompt_caching: e.priceCacheReadMicro !== null,
     },
     unsupported_parameters: e.unsupportedParams,
+    quantization: e.quantization,
+    data_collection: e.dataCollection,
   };
 }
 

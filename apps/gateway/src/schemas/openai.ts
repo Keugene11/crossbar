@@ -9,7 +9,20 @@ import { ProviderPreferences } from "./routing.js";
  * nowhere else, so adding a provider never touches the routing core.
  */
 
-export const TextPart = z.object({ type: z.literal("text"), text: z.string() });
+/**
+ * Marks a content part as a prompt-cache breakpoint.
+ *
+ * Passed straight through to providers that support caching. Placement is the
+ * caller's decision because it depends on which prefix of *their* prompt is
+ * stable, which the gateway has no way to know.
+ */
+export const CacheControl = z.object({ type: z.literal("ephemeral") });
+
+export const TextPart = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+  cache_control: CacheControl.optional(),
+});
 
 export const ImagePart = z.object({
   type: z.literal("image_url"),

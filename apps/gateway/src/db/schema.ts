@@ -29,6 +29,20 @@ export const models = pgTable("models", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Provider-level metadata: the things a caller needs to decide whether a
+ * provider is acceptable, independent of any one model.
+ */
+export const providers = pgTable("providers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  /** Whether this provider may retain or train on prompts sent to it. */
+  mayTrainOnData: boolean("may_train_on_data").notNull().default(false),
+  privacyPolicyUrl: text("privacy_policy_url"),
+  termsUrl: text("terms_url"),
+  statusPageUrl: text("status_page_url"),
+});
+
 export const endpoints = pgTable(
   "endpoints",
   {
@@ -62,6 +76,17 @@ export const endpoints = pgTable(
      * Anthropic models, where sampling params were removed.
      */
     unsupportedParams: jsonb("unsupported_params").$type<string[]>().notNull(),
+
+    /**
+     * Weight quantization served at this endpoint. A heavily quantized variant
+     * of a model can underperform the same model elsewhere, so callers may
+     * filter on it.
+     */
+    quantization: text("quantization"),
+    /** Whether prompts sent here may be retained or trained on. */
+    dataCollection: text("data_collection", { enum: ["allow", "deny"] })
+      .notNull()
+      .default("deny"),
 
     status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
     /** Manual tiebreak; higher wins when prices are equal. */
@@ -108,6 +133,7 @@ export const generations = pgTable(
   (t) => [index("generations_created_at_idx").on(t.createdAt)],
 );
 
+export type ProviderRow = typeof providers.$inferSelect;
 export type ModelRow = typeof models.$inferSelect;
 export type EndpointRow = typeof endpoints.$inferSelect;
 export type GenerationRow = typeof generations.$inferSelect;

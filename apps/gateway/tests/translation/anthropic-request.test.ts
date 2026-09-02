@@ -3,29 +3,25 @@ import { toMessageCreateParams, convertMessages } from "../../src/providers/anth
 import type { Endpoint } from "../../src/registry/catalog.js";
 import type { ChatCompletionRequest } from "../../src/schemas/openai.js";
 import { ChatCompletionRequest as RequestSchema } from "../../src/schemas/openai.js";
+import { makeEndpoint } from "../fixtures.js";
 
 function endpoint(overrides: Partial<Endpoint> = {}): Endpoint {
-  return {
+  return makeEndpoint({
     id: "test/model::anthropic",
     modelId: "test/model",
     provider: "anthropic",
     upstreamModelId: "claude-opus-5",
-    baseUrl: null,
     pricePromptMicro: 5_000_000,
     priceCompletionMicro: 25_000_000,
     priceCacheReadMicro: 500_000,
     priceCacheWriteMicro: 6_250_000,
     contextLength: 1_000_000,
     maxOutputTokens: 128_000,
-    supportsTools: true,
-    supportsStreaming: true,
     supportsVision: true,
     supportsReasoning: true,
     unsupportedParams: ["temperature", "top_p", "top_k"],
-    status: "active",
-    priority: 0,
     ...overrides,
-  };
+  });
 }
 
 function request(body: Partial<ChatCompletionRequest>): ChatCompletionRequest {
