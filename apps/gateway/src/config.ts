@@ -1,4 +1,38 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 /** Process configuration, read once at startup. */
+
+/**
+ * Load `.env` before anything reads `process.env`.
+ *
+ * Without this the documented setup silently fails: you put a provider key in
+ * the file the README tells you to, start the gateway, and every request comes
+ * back 401 from the provider with nothing to suggest the key was never read.
+ *
+ * Uses Node's built-in loader rather than a dependency, and never overwrites a
+ * variable that is already set -- a real environment beats a checked-out file.
+ */
+export function loadDotEnv(env: NodeJS.ProcessEnv = process.env): void {
+  const packageRoot = resolve(import.meta.dirname, "..");
+  const candidates = [
+    env.CROSSBAR_ENV_FILE,
+    join(process.cwd(), ".env"),
+    join(packageRoot, ".env"),
+  ].filter((p): p is string => Boolean(p));
+
+  for (const file of candidates) {
+    if (!existsSync(file)) continue;
+    try {
+      process.loadEnvFile(file);
+      return;
+    } catch {
+      // A malformed file should not stop the gateway from starting.
+    }
+  }
+}
+
+loadDotEnv();
 
 function csv(value: string | undefined): string[] {
   if (!value) return [];

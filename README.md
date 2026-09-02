@@ -35,8 +35,12 @@ No database to install: with `DATABASE_URL` unset, crossbar runs on
 brings one up). PGlite allows **one process per datadir**, so stop the server
 before running `pnpm db:seed` against the same directory.
 
-Copy `apps/gateway/.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` /
-`OPENAI_API_KEY` for the providers you want to reach. `CROSSBAR_API_KEYS` is a
+Copy `apps/gateway/.env.example` to `apps/gateway/.env` and fill in
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for the providers you want to reach.
+The file is loaded at startup; a variable already set in the environment wins
+over it. Without provider keys the gateway still runs, and `crossbar/echo`
+answers without calling anything — but real models will return 401 from the
+provider. `CROSSBAR_API_KEYS` is a
 comma-separated allowlist of bearer keys; leave it empty to disable auth locally.
 
 ## API
