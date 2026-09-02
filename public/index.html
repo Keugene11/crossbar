@@ -310,7 +310,7 @@ footer a:hover { color: var(--fg); }
       <div class="stat"><b id="s-models">—</b><span>Models</span></div>
       <div class="stat"><b id="s-endpoints">—</b><span>Endpoints</span></div>
       <div class="stat"><b id="s-providers">—</b><span>Providers</span></div>
-      <div class="stat"><b id="s-cheapest">—</b><span>Cheapest / MTok</span></div>
+      <div class="stat"><b id="s-direct">—</b><span>Direct routes</span></div>
     </div>
   </div>
 </header>
@@ -338,6 +338,11 @@ footer a:hover { color: var(--fg); }
         <p>The provider credentials sit on the gateway, not in your app. Whoever runs a crossbar
            holds them once and issues keys with credit on them &mdash; so using it means a single key
            and a single balance, not an account with every AI company.</p>
+
+        <h3>Direct where it can be, aggregated where it can't</h3>
+        <p>Most models route straight to the company that serves them &mdash; Google to Google,
+           DeepSeek to DeepSeek. Open-weight families like Llama have no first-party API to route
+           to, so those go through an aggregator. Every model shows which it is.</p>
 
         <h3>If a provider fails, it tries the next</h3>
         <p>Rate limited, erroring, or slow — crossbar moves on to another endpoint mid-request, and
@@ -652,7 +657,11 @@ function renderStats() {
   $("#s-models").textContent = MODELS.length;
   $("#s-endpoints").textContent = endpoints;
   $("#s-providers").textContent = PROVIDERS.length || new Set(MODELS.flatMap((m) => (m.endpoints||[]).map((e)=>e.provider_name))).size;
-  $("#s-cheapest").textContent = prices.length ? money(Math.min(...prices)) : "—";
+  // Direct means the provider that actually serves the model, rather than
+  // reaching it through an aggregator -- the difference between a router and
+  // a proxy, so it is worth showing rather than asserting.
+  const direct = MODELS.filter((m) => (m.endpoints || []).some((e) => e.provider_name !== "openrouter"));
+  $("#s-direct").textContent = `${direct.length}`;
 }
 
 function renderChips() {
@@ -667,7 +676,7 @@ function renderChips() {
     .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
     .slice(0, 12)
     .map(([a]) => a);
-  const caps = [["tools","Tools"],["vision","Vision"],["reasoning","Reasoning"],["prompt_caching","Caching"]];
+  const caps = [["tools","Tools"],["vision","Vision"],["reasoning","Reasoning"],["prompt_caching","Caching"],["__direct","Direct route"]];
   $("#chips").innerHTML =
     authors.map((a) => `<button class="chip" data-provider="${esc(a)}" aria-pressed="false">${esc(a)}</button>`).join("") +
     caps.map(([k, label]) => `<button class="chip" data-cap="${k}" aria-pressed="false">${label}</button>`).join("");
@@ -691,7 +700,11 @@ function cheapest(m) {
 
 function matches(m, q) {
   if (filterProvider && !m.id.startsWith(filterProvider + "/")) return false;
-  if (filterCap && !(m.endpoints || []).some((e) => e.supported_parameters?.[filterCap])) return false;
+  if (filterCap === "__direct") {
+    if (!(m.endpoints || []).some((e) => e.provider_name !== "openrouter")) return false;
+  } else if (filterCap && !(m.endpoints || []).some((e) => e.supported_parameters?.[filterCap])) {
+    return false;
+  }
   if (!q) return true;
   const hay = [m.id, m.name, m.description, ...(m.endpoints || []).map((e) => e.provider_name)].join(" ").toLowerCase();
   return q.split(/\s+/).every((t) => hay.includes(t));
@@ -745,6 +758,9 @@ function card(m) {
       ${caps.has("vision") ? `<span class="badge">vision</span>` : ""}
       ${caps.has("reasoning") ? `<span class="badge">reasoning</span>` : ""}
       ${caps.has("prompt_caching") ? `<span class="badge">caching</span>` : ""}
+      ${eps.some((e) => e.provider_name !== "openrouter")
+        ? `<span class="badge on" title="Routed straight to the provider that serves it, with the aggregator as fallback">direct</span>`
+        : `<span class="badge" title="Reached through an aggregator; no first-party API to route to">via aggregator</span>`}
     </div>
     ${m.description ? `<p class="mdesc">${esc(m.description)}</p>` : ""}
     <div class="mmeta">

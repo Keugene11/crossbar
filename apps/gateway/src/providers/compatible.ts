@@ -28,6 +28,32 @@ export const COMPATIBLE_PROVIDERS: CompatibleProvider[] = [
     privacyPolicyUrl: "https://openrouter.ai/privacy",
   },
   {
+    id: "google",
+    name: "Google AI Studio",
+    // Google publishes an OpenAI-compatible surface alongside its own API.
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    envVar: "GOOGLE_API_KEY",
+    privacyPolicyUrl: "https://ai.google.dev/gemini-api/terms",
+  },
+  {
+    id: "moonshot",
+    name: "Moonshot AI",
+    baseUrl: "https://api.moonshot.ai/v1",
+    envVar: "MOONSHOT_API_KEY",
+  },
+  {
+    id: "zai",
+    name: "Z.ai",
+    baseUrl: "https://api.z.ai/api/paas/v4",
+    envVar: "ZAI_API_KEY",
+  },
+  {
+    id: "dashscope",
+    name: "Alibaba Cloud (DashScope)",
+    baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    envVar: "DASHSCOPE_API_KEY",
+  },
+  {
     id: "groq",
     name: "Groq",
     baseUrl: "https://api.groq.com/openai/v1",
@@ -65,3 +91,40 @@ export const COMPATIBLE_PROVIDERS: CompatibleProvider[] = [
     envVar: "FIREWORKS_API_KEY",
   },
 ];
+
+/**
+ * Which provider natively serves a given model author.
+ *
+ * Without this, importing a catalog means every model routes through the
+ * aggregator it was imported from -- which is a proxy, not a router. Mapping an
+ * author to its first-party API gives the request a direct path, and the
+ * aggregator becomes what it should be: the fallback behind it.
+ *
+ * Open-weight families (Llama, and Qwen when self-hosted) are deliberately
+ * absent. Nobody serves them "natively" -- you choose a host -- and guessing
+ * one host's model ids would be inventing data.
+ */
+export const NATIVE_PROVIDER_BY_AUTHOR: Record<string, string> = {
+  anthropic: "anthropic",
+  openai: "openai",
+  google: "google",
+  deepseek: "deepseek",
+  mistralai: "mistral",
+  "x-ai": "xai",
+  moonshotai: "moonshot",
+  "z-ai": "zai",
+  qwen: "dashscope",
+};
+
+/**
+ * The id that provider knows the model by.
+ *
+ * Every one of these APIs names its own models without the author prefix that
+ * an aggregator adds for disambiguation. When a guess is wrong the upstream
+ * answers 404, which the cascade treats as "try the next endpoint" -- so a bad
+ * mapping degrades to the aggregator rather than failing the request.
+ */
+export function nativeModelId(aggregatorId: string): string {
+  const slash = aggregatorId.indexOf("/");
+  return slash === -1 ? aggregatorId : aggregatorId.slice(slash + 1);
+}

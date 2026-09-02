@@ -282,10 +282,23 @@ pnpm catalog:sync   # refresh src/registry/catalog-data.json
 The file is checked in, so the gateway boots with no network, and it records its
 source and fetch date so staleness is visible rather than assumed.
 
-Flagship models carry **two** endpoints — the first-party API and an aggregator
-— so routing has a real choice between a cheaper direct path and a fallback that
-survives the direct one going down. That is the failover story working on actual
-data rather than a fixture.
+**Where each model actually routes matters more than how many there are.** An
+imported catalog whose endpoints all point back at the aggregator it came from
+is a proxy with extra steps, not a router. So each model is mapped to the
+provider that genuinely serves it — Google to Google, DeepSeek to DeepSeek,
+Anthropic to Anthropic — and the aggregator sits behind that as the fallback:
+
+| | |
+|---|---|
+| **216 of 337** | have a direct first-party route, aggregator behind it |
+| **121** | open-weight families (Llama, and similar) with no first-party API to route to |
+
+That split is visible per model in `/v1/models` and on the site, rather than
+something you have to take on faith. First-party APIs name their models without
+the author prefix an aggregator adds, so the direct id is derived by stripping
+it; when that guess is wrong the upstream answers 404, which the cascade already
+treats as "try the next endpoint" — a bad mapping degrades to the aggregator
+instead of failing the request.
 
 ## Adding a provider
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalogSeed, catalogSource, providerSeed } from "../../src/registry/seed.js";
-import { normalize } from "../../src/registry/sync.js";
-import { COMPATIBLE_PROVIDERS } from "../../src/providers/compatible.js";
+import { normalize, type RawModel } from "../../src/registry/sync.js";
+import { COMPATIBLE_PROVIDERS, nativeModelId } from "../../src/providers/compatible.js";
 
 describe("imported catalog", () => {
   it("carries a real catalog, not a handful of examples", () => {
@@ -35,6 +35,43 @@ describe("imported catalog", () => {
     expect(opus?.endpoints.map((e) => e.provider)).toEqual(["anthropic", "openrouter"]);
   });
 
+  it("routes most models to the provider that actually serves them", () => {
+    // Importing a catalog from an aggregator and pointing every endpoint back
+    // at it would make crossbar a proxy with extra steps rather than a router.
+    const direct = catalogSeed.filter((m) =>
+      m.endpoints.some((e) => e.provider !== "openrouter"),
+    );
+    expect(direct.length).toBeGreaterThan(catalogSeed.length / 2);
+  });
+
+  it("gives a native provider the first attempt, aggregator second", () => {
+    for (const id of ["google/gemini-2.5-flash", "deepseek/deepseek-chat", "x-ai/grok-4"]) {
+      const m = catalogSeed.find((x) => x.id === id);
+      if (!m) continue;
+      expect(m.endpoints[0]?.provider, id).not.toBe("openrouter");
+      expect(m.endpoints.at(-1)?.provider, id).toBe("openrouter");
+    }
+  });
+
+  it("addresses a native endpoint by the id that provider uses", () => {
+    // First-party APIs name their own models without the author prefix an
+    // aggregator adds. A wrong guess 404s, which the cascade treats as
+    // "try the next endpoint" -- so it degrades to the aggregator.
+    expect(nativeModelId("google/gemini-2.5-flash")).toBe("gemini-2.5-flash");
+    expect(nativeModelId("anthropic/claude-opus-5")).toBe("claude-opus-5");
+    expect(nativeModelId("bare-id")).toBe("bare-id");
+
+    const gemini = catalogSeed.find((m) => m.id === "google/gemini-2.5-flash");
+    expect(gemini?.endpoints[0]?.upstreamModelId).toBe("gemini-2.5-flash");
+  });
+
+  it("leaves open-weight families to the aggregator rather than inventing a host", () => {
+    // Nobody serves Llama "natively" -- you pick a host, and guessing one
+    // host's model ids would be fabricating data.
+    const llama = catalogSeed.find((m) => m.id.startsWith("meta-llama/"));
+    if (llama) expect(llama.endpoints.every((e) => e.provider === "openrouter")).toBe(true);
+  });
+
   it("keeps the built-in demo model reachable", () => {
     const echo = catalogSeed.find((m) => m.id === "crossbar/echo");
     expect(echo?.endpoints[0]?.provider).toBe("crossbar");
@@ -55,7 +92,7 @@ describe("imported catalog", () => {
 });
 
 describe("normalising the upstream feed", () => {
-  const raw = [
+  const raw: RawModel[] = [
     {
       id: "vendor/model",
       name: "Vendor: Model",

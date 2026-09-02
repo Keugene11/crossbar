@@ -19,7 +19,11 @@ export interface SeedModel {
 }
 
 import imported from "./catalog-data.json" with { type: "json" };
-import { COMPATIBLE_PROVIDERS } from "../providers/compatible.js";
+import {
+  COMPATIBLE_PROVIDERS,
+  NATIVE_PROVIDER_BY_AUTHOR,
+  nativeModelId,
+} from "../providers/compatible.js";
 
 export interface SeedProvider {
   id: string;
@@ -377,6 +381,29 @@ function buildCatalog(): SeedModel[] {
   const byId = new Map<string, SeedModel>();
 
   for (const m of imported.models) {
+    const shared = {
+      // Published as USD per token; the seed loader works in USD per MTok.
+      pricePrompt: m.pricePrompt * 1e6,
+      priceCompletion: m.priceCompletion * 1e6,
+      ...(m.priceCacheRead === null ? {} : { priceCacheRead: m.priceCacheRead * 1e6 }),
+      ...(m.priceCacheWrite === null ? {} : { priceCacheWrite: m.priceCacheWrite * 1e6 }),
+      maxOutputTokens: m.maxOutputTokens ?? Math.min(m.contextLength, 32_768),
+      supportsTools: m.supportsTools,
+      supportsVision: m.inputModalities.includes("image"),
+      supportsReasoning: m.supportsReasoning,
+    };
+
+    const author = m.id.split("/")[0] ?? "";
+    const native = NATIVE_PROVIDER_BY_AUTHOR[author];
+    const endpoints: SeedEndpoint[] = [];
+
+    // Direct first. The aggregator sits behind it as the fallback -- which is
+    // the right shape for a router, and the wrong way round is a proxy.
+    if (native) {
+      endpoints.push({ ...shared, provider: native, upstreamModelId: nativeModelId(m.id) });
+    }
+    endpoints.push({ ...shared, provider: "openrouter", upstreamModelId: m.id });
+
     byId.set(m.id, {
       id: m.id,
       name: m.name,
@@ -384,21 +411,7 @@ function buildCatalog(): SeedModel[] {
       contextLength: m.contextLength,
       inputModalities: m.inputModalities,
       outputModalities: m.outputModalities,
-      endpoints: [
-        {
-          provider: "openrouter",
-          upstreamModelId: m.id,
-          // Published as USD per token; the seed loader works in USD per MTok.
-          pricePrompt: m.pricePrompt * 1e6,
-          priceCompletion: m.priceCompletion * 1e6,
-          ...(m.priceCacheRead === null ? {} : { priceCacheRead: m.priceCacheRead * 1e6 }),
-          ...(m.priceCacheWrite === null ? {} : { priceCacheWrite: m.priceCacheWrite * 1e6 }),
-          maxOutputTokens: m.maxOutputTokens ?? Math.min(m.contextLength, 32_768),
-          supportsTools: m.supportsTools,
-          supportsVision: m.inputModalities.includes("image"),
-          supportsReasoning: m.supportsReasoning,
-        },
-      ],
+      endpoints,
     });
   }
 
@@ -408,9 +421,13 @@ function buildCatalog(): SeedModel[] {
       byId.set(direct.id, direct);
       continue;
     }
-    // First-party endpoints go first: they are cheaper and hand-verified, and
-    // the aggregator entry becomes the fallback behind them.
-    existing.endpoints = [...direct.endpoints, ...existing.endpoints];
+    // Hand-verified pricing supersedes the derived endpoint for that provider;
+    // everything else stays as the fallback chain behind it.
+    const superseded = new Set(direct.endpoints.map((e) => e.provider));
+    existing.endpoints = [
+      ...direct.endpoints,
+      ...existing.endpoints.filter((e) => !superseded.has(e.provider)),
+    ];
     existing.description ??= direct.description;
   }
 

@@ -37,7 +37,7 @@ export interface ImportedCatalog {
   models: ImportedModel[];
 }
 
-interface RawModel {
+export interface RawModel {
   id: string;
   name: string;
   description?: string;
