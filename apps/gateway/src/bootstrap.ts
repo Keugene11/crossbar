@@ -3,6 +3,7 @@ import { config, type Config } from "./config.js";
 import { AnthropicAdapter } from "./providers/anthropic/index.js";
 import { EchoAdapter } from "./providers/echo/index.js";
 import { OpenAIAdapter } from "./providers/openai/index.js";
+import { COMPATIBLE_PROVIDERS } from "./providers/compatible.js";
 import { ProviderRegistry } from "./providers/types.js";
 import { Catalog, staticSource, type Endpoint, type Model, type Provider } from "./registry/catalog.js";
 import type { DbHandle } from "./db/client.js";
@@ -31,10 +32,23 @@ export interface Bootstrapped {
 }
 
 function buildProviders(cfg: Config): ProviderRegistry {
-  return new ProviderRegistry()
+  const registry = new ProviderRegistry()
     .register(new AnthropicAdapter({ apiKey: cfg.anthropicApiKey }))
     .register(new OpenAIAdapter({ apiKey: cfg.openaiApiKey }))
     .register(new EchoAdapter());
+
+  // Everything that speaks the OpenAI dialect is one adapter under many ids.
+  // Registered whether or not a key is present: an unconfigured provider
+  // fails at the credential check like any other, which the cascade already
+  // knows to skip, and the alternative is a model list that changes shape
+  // depending on which environment variables happen to be set.
+  for (const p of COMPATIBLE_PROVIDERS) {
+    registry.register(
+      new OpenAIAdapter({ id: p.id, apiKey: process.env[p.envVar], baseUrl: p.baseUrl }),
+    );
+  }
+
+  return registry;
 }
 
 /** Materialise the compiled-in seed as catalog rows, with no database. */

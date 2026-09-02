@@ -268,6 +268,25 @@ the database is unreachable or the catalog is empty, so a broken instance drops
 out of the pool instead of accepting traffic it cannot serve. Set `DATABASE_URL`
 to point at a Postgres server; otherwise PGlite persists to the `/data` volume.
 
+## The catalog
+
+337 models across 57 authors, with real pricing, context windows and
+capabilities. The data is imported rather than hand-maintained — prices and
+context limits change constantly, and a hand-written list of hundreds would be
+wrong within a week:
+
+```bash
+pnpm catalog:sync   # refresh src/registry/catalog-data.json
+```
+
+The file is checked in, so the gateway boots with no network, and it records its
+source and fetch date so staleness is visible rather than assumed.
+
+Flagship models carry **two** endpoints — the first-party API and an aggregator
+— so routing has a real choice between a cheaper direct path and a fallback that
+survives the direct one going down. That is the failover story working on actual
+data rather than a fixture.
+
 ## Adding a provider
 
 A provider is one file. The gateway speaks OpenAI Chat Completions internally,
@@ -281,6 +300,12 @@ interface ProviderAdapter {
   classifyError(err): CrossbarError;
 }
 ```
+
+Most providers need no adapter at all. Groq, DeepSeek, xAI, Mistral, Together,
+Fireworks and OpenRouter all speak the OpenAI dialect, so they are rows in
+`src/providers/compatible.ts` — a base URL and the environment variable holding
+their key — and `OpenAIAdapter` is registered once per entry. A genuinely
+different API (Anthropic's, say) is the case that needs a file.
 
 Register it in `src/index.ts` and add endpoints to `src/registry/seed.ts`.
 Per-endpoint `unsupportedParams` let the adapter strip fields an upstream

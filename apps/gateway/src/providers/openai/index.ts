@@ -33,12 +33,20 @@ function clampEffort(effort: string | undefined): "minimal" | "low" | "medium" |
  * format, so this is a passthrough plus model rewriting and quirk stripping.
  */
 export class OpenAIAdapter implements ProviderAdapter {
-  readonly id = "openai";
+  /**
+   * Configurable because a great many providers speak the OpenAI dialect --
+   * OpenRouter, Groq, DeepSeek, xAI, Mistral, Together and most self-hosted
+   * servers. One adapter registered under several ids reaches all of them,
+   * which is why adding a provider is usually a row of configuration rather
+   * than a file of code.
+   */
+  readonly id: string;
   readonly #opts: AdapterOptions;
   /** One client per base URL -- see the note on the Anthropic adapter. */
   readonly #clients = new Map<string, OpenAI>();
 
-  constructor(opts: AdapterOptions = {}) {
+  constructor(opts: AdapterOptions & { id?: string } = {}) {
+    this.id = opts.id ?? "openai";
     this.#opts = opts;
   }
 
@@ -47,7 +55,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     let client = this.#clients.get(baseUrl);
     if (!client) {
       client = new OpenAI({
-        apiKey: this.#opts.apiKey ?? "missing-openai-api-key",
+        apiKey: this.#opts.apiKey ?? `missing-${this.id}-api-key`,
         ...(baseUrl ? { baseURL: baseUrl } : {}),
         ...(this.#opts.fetch ? { fetch: this.#opts.fetch } : {}),
       });

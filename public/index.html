@@ -310,7 +310,7 @@ footer a:hover { color: var(--fg); }
       <div class="stat"><b id="s-models">—</b><span>Models</span></div>
       <div class="stat"><b id="s-endpoints">—</b><span>Endpoints</span></div>
       <div class="stat"><b id="s-providers">—</b><span>Providers</span></div>
-      <div class="stat"><b id="s-cheapest">—</b><span>From / MTok</span></div>
+      <div class="stat"><b id="s-cheapest">—</b><span>Cheapest / MTok</span></div>
     </div>
   </div>
 </header>
@@ -526,7 +526,7 @@ pnpm dev   <span class="c"># http://localhost:8080</span></pre></div>
     <div class="shead">
       <div>
         <h2>Models</h2>
-        <p>Live from this gateway's catalog. Prices are per million tokens.</p>
+        <p><span id="count">…</span> &middot; live from this gateway's catalog. Prices are per million tokens.</p>
       </div>
       <select id="sort" aria-label="Sort models">
         <option value="price">Cheapest first</option>
@@ -627,6 +627,10 @@ let PROVIDERS = [];
 let filterProvider = null;
 let filterCap = null;
 
+/** Rendered rows are capped: several hundred at once janks the page. */
+const PAGE = 40;
+let shown = PAGE;
+
 async function load() {
   const [m, p] = await Promise.all([
     fetch("/v1/models").then((r) => r.json()),
@@ -652,7 +656,17 @@ function renderStats() {
 }
 
 function renderChips() {
-  const authors = [...new Set(MODELS.map((m) => m.id.split("/")[0]))].sort();
+  // 57 authors would wrap into a wall. Show the ones with the most models and
+  // let search reach the rest.
+  const counts = new Map();
+  for (const m of MODELS) {
+    const a = m.id.split("/")[0];
+    counts.set(a, (counts.get(a) ?? 0) + 1);
+  }
+  const authors = [...counts.entries()]
+    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+    .slice(0, 12)
+    .map(([a]) => a);
   const caps = [["tools","Tools"],["vision","Vision"],["reasoning","Reasoning"],["prompt_caching","Caching"]];
   $("#chips").innerHTML =
     authors.map((a) => `<button class="chip" data-provider="${esc(a)}" aria-pressed="false">${esc(a)}</button>`).join("") +
@@ -683,10 +697,12 @@ function matches(m, q) {
   return q.split(/\s+/).every((t) => hay.includes(t));
 }
 
-function render() {
+function render(resetPage = true) {
+  if (resetPage) shown = PAGE;
+
   const q = $("#q").value.trim().toLowerCase();
   const sort = $("#sort").value;
-  let rows = MODELS.filter((m) => matches(m, q));
+  const rows = MODELS.filter((m) => matches(m, q));
 
   rows.sort((a, b) =>
     sort === "name" ? a.id.localeCompare(b.id)
@@ -694,11 +710,21 @@ function render() {
     : sort === "price-desc" ? cheapest(b) - cheapest(a)
     : cheapest(a) - cheapest(b));
 
+  $("#count").textContent = rows.length === MODELS.length
+    ? `${MODELS.length} models`
+    : `${rows.length} of ${MODELS.length} models`;
+
+  const page = rows.slice(0, shown);
   $("#list").innerHTML = rows.length === 0
     ? `<div class="empty">No model matches that filter.</div>`
-    : rows.map(card).join("");
+    : page.map(card).join("") +
+      (rows.length > shown
+        ? `<button class="btn" id="more" style="justify-content:center;margin-top:4px">Show ${Math.min(PAGE, rows.length - shown)} more</button>`
+        : "");
 
   for (const el of document.querySelectorAll(".model")) el.onclick = () => openDrawer(el.dataset.id);
+  const more = $("#more");
+  if (more) more.onclick = () => { shown += PAGE; render(false); };
 }
 
 function card(m) {

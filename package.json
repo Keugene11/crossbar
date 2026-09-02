@@ -13,7 +13,8 @@
     "typecheck:api": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "pnpm --filter @crossbar/gateway db:migrate",
     "db:seed": "pnpm --filter @crossbar/gateway db:seed",
-    "db:generate": "pnpm --filter @crossbar/gateway db:generate"
+    "db:generate": "pnpm --filter @crossbar/gateway db:generate",
+    "catalog:sync": "pnpm --filter @crossbar/gateway catalog:sync"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

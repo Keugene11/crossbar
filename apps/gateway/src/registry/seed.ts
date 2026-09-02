@@ -18,6 +18,9 @@ export interface SeedModel {
   endpoints: SeedEndpoint[];
 }
 
+import imported from "./catalog-data.json" with { type: "json" };
+import { COMPATIBLE_PROVIDERS } from "../providers/compatible.js";
+
 export interface SeedProvider {
   id: string;
   name: string;
@@ -35,7 +38,7 @@ export interface SeedProvider {
  * default. Consumer and enterprise agreements differ -- verify against your
  * own contract before relying on this for a compliance decision.
  */
-export const providerSeed: SeedProvider[] = [
+const firstPartyProviders: SeedProvider[] = [
   {
     id: "crossbar",
     name: "crossbar (built-in)",
@@ -58,6 +61,8 @@ export const providerSeed: SeedProvider[] = [
     statusPageUrl: "https://status.openai.com",
   },
 ];
+
+
 
 export interface SeedEndpoint {
   provider: string;
@@ -90,7 +95,7 @@ const NO_SAMPLING = ["temperature", "top_p", "top_k"];
 /** Fable-tier additionally rejects forced tool choice (`any` / named tool). */
 const NO_SAMPLING_NO_FORCED_TOOLS = [...NO_SAMPLING, "tool_choice:required", "tool_choice:function"];
 
-export const catalogSeed: SeedModel[] = [
+const directModels: SeedModel[] = [
   {
     // A real endpoint served by a built-in adapter, so the gateway can be
     // exercised end to end before you have credentials with anyone.
@@ -349,6 +354,74 @@ export const catalogSeed: SeedModel[] = [
   },
 ];
 
+/**
+ * Providers reachable through the OpenAI dialect, plus the built-in one.
+ * Merged with the first-party entries above.
+ */
+const compatibleProviderSeed: SeedProvider[] = COMPATIBLE_PROVIDERS.map((p) => ({
+  id: p.id,
+  name: p.name,
+  mayTrainOnData: p.mayTrainOnData ?? false,
+  ...(p.privacyPolicyUrl ? { privacyPolicyUrl: p.privacyPolicyUrl } : {}),
+}));
+
+/**
+ * The full catalog: every imported model, plus first-party endpoints where we
+ * have verified pricing for one.
+ *
+ * A flagship therefore carries two endpoints -- direct, and via the aggregator
+ * -- which is the point. Routing gets a real choice between a cheaper direct
+ * path and a fallback that stays up when the direct one does not.
+ */
+function buildCatalog(): SeedModel[] {
+  const byId = new Map<string, SeedModel>();
+
+  for (const m of imported.models) {
+    byId.set(m.id, {
+      id: m.id,
+      name: m.name,
+      ...(m.description ? { description: m.description } : {}),
+      contextLength: m.contextLength,
+      inputModalities: m.inputModalities,
+      outputModalities: m.outputModalities,
+      endpoints: [
+        {
+          provider: "openrouter",
+          upstreamModelId: m.id,
+          // Published as USD per token; the seed loader works in USD per MTok.
+          pricePrompt: m.pricePrompt * 1e6,
+          priceCompletion: m.priceCompletion * 1e6,
+          ...(m.priceCacheRead === null ? {} : { priceCacheRead: m.priceCacheRead * 1e6 }),
+          ...(m.priceCacheWrite === null ? {} : { priceCacheWrite: m.priceCacheWrite * 1e6 }),
+          maxOutputTokens: m.maxOutputTokens ?? Math.min(m.contextLength, 32_768),
+          supportsTools: m.supportsTools,
+          supportsVision: m.inputModalities.includes("image"),
+          supportsReasoning: m.supportsReasoning,
+        },
+      ],
+    });
+  }
+
+  for (const direct of directModels) {
+    const existing = byId.get(direct.id);
+    if (!existing) {
+      byId.set(direct.id, direct);
+      continue;
+    }
+    // First-party endpoints go first: they are cheaper and hand-verified, and
+    // the aggregator entry becomes the fallback behind them.
+    existing.endpoints = [...direct.endpoints, ...existing.endpoints];
+    existing.description ??= direct.description;
+  }
+
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export const catalogSeed: SeedModel[] = buildCatalog();
+
+/** Provenance of the imported half of the catalog. */
+export const catalogSource = { source: imported.source, fetchedAt: imported.fetchedAt };
+
 /** USD per MTok -> integer micro-USD per MTok. */
 export function toMicro(usdPerMTok: number): number {
   return Math.round(usdPerMTok * 1_000_000);
@@ -357,3 +430,6 @@ export function toMicro(usdPerMTok: number): number {
 export function endpointId(modelId: string, provider: string): string {
   return `${modelId}::${provider}`;
 }
+
+/** Every provider crossbar knows about, first-party and OpenAI-compatible. */
+export const providerSeed: SeedProvider[] = [...firstPartyProviders, ...compatibleProviderSeed];

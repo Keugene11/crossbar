@@ -13,7 +13,8 @@
     "test:live": "LIVE=1 vitest run tests/live",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "catalog:sync": "tsx src/registry/sync.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
