@@ -181,6 +181,34 @@ pre .k { color: var(--accent); }
 pre .s { color: var(--green); }
 pre .c { color: var(--dim); }
 
+/* ---------- explainer ---------- */
+.explain { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: center; }
+@media (max-width: 860px) { .explain { grid-template-columns: 1fr; } }
+.explain h3 { font-size: 17px; margin: 0 0 8px; font-weight: 590; letter-spacing: -.015em; }
+.explain p { color: var(--fg-mid); font-size: 14.5px; margin: 0 0 14px; }
+.explain .before { border-left: 2px solid var(--line); padding-left: 15px; margin-bottom: 20px; }
+.explain .before b { color: var(--fg); font-weight: 560; }
+.diagram { width: 100%; height: auto; }
+.diagram text { font-family: var(--sans); }
+.diagram .box { fill: var(--card); stroke: var(--line); }
+.diagram .hub { fill: var(--accent-soft); stroke: var(--accent); }
+.diagram .t { fill: var(--fg); }
+.diagram .tm { fill: var(--fg-mid); }
+.diagram .td { fill: var(--dim); }
+.diagram .ta { fill: var(--accent); }
+.diagram .flow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.diagram .fallback { stroke: var(--dim); stroke-width: 1.4; fill: none; stroke-dasharray: 4 4; }
+.diagram .head { fill: var(--dim); }
+.diagram .headA { fill: var(--accent); }
+.faq { display: flex; flex-direction: column; gap: 9px; margin-top: 8px; }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 18px; }
+.q h4 { margin: 0 0 6px; font-size: 14.5px; font-weight: 570; }
+.q p { margin: 0; color: var(--fg-mid); font-size: 14px; }
+.q p + p { margin-top: 8px; }
+.keytable { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin-top: 12px; font-size: 13.5px; align-items: start; }
+.keytable code { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+.keytable span { color: var(--fg-mid); }
+
 /* ---------- quickstart ---------- */
 .steps { counter-reset: s; display: flex; flex-direction: column; gap: 14px; }
 .step { display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start; }
@@ -250,6 +278,7 @@ footer a:hover { color: var(--fg); }
       crossbar
     </a>
     <div class="navlinks">
+      <a href="#what">How it works</a>
       <a href="#start">Quickstart</a>
       <a href="#play">Playground</a>
       <a href="#models">Models</a>
@@ -270,9 +299,9 @@ footer a:hover { color: var(--fg); }
 <header id="top">
   <div class="wrap">
     <h1>The unified interface<br>for <span class="grad">every model</span></h1>
-    <p class="lede">One API key, one wire format, many providers. crossbar routes each request by
-      policy, translates it into the provider's native dialect, and fails over to the next
-      candidate when one goes down.</p>
+    <p class="lede">Write one integration instead of one per AI provider. crossbar sits in front of
+      Anthropic, OpenAI and others, speaks a single API, and automatically falls back to another
+      provider when one is down.</p>
     <div class="cta">
       <a class="btn primary" href="#play">Try it now</a>
       <a class="btn" href="#start">Quickstart</a>
@@ -286,6 +315,113 @@ footer a:hover { color: var(--fg); }
   </div>
 </header>
 
+
+
+<section id="what">
+  <div class="wrap">
+    <div class="explain">
+      <div>
+        <h2 style="font-size:24px;margin-bottom:12px">What is this?</h2>
+
+        <div class="before">
+          <p style="margin-bottom:6px"><b>Without a router:</b> every AI provider has its own API.
+             Using Claude and GPT means writing the integration twice, holding two sets of
+             credentials, and going down whenever whichever one you picked goes down.</p>
+        </div>
+
+        <h3>crossbar sits in front of them</h3>
+        <p>You send it one kind of request. It works out which provider should handle it, rewrites
+           the request into that provider's own format, and sends the answer back in the shape you
+           already expect.</p>
+
+        <h3>If a provider fails, it tries the next</h3>
+        <p>Rate limited, erroring, or slow — crossbar moves on to another endpoint mid-request, and
+           your app just sees a normal reply. It picks the cheapest capable option by default, and
+           records what every request cost and which providers it tried.</p>
+      </div>
+
+      <div>
+        <svg class="diagram" viewBox="0 0 420 260" role="img" aria-label="Diagram: your app sends one request to crossbar, which routes it to a provider and falls back to another if one fails">
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path class="head" d="M0 0 L10 5 L0 10 z"/>
+            </marker>
+            <marker id="arwA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path class="headA" d="M0 0 L10 5 L0 10 z"/>
+            </marker>
+          </defs>
+
+          <rect class="box" x="4" y="104" width="96" height="52" rx="9"/>
+          <text class="t" x="52" y="127" text-anchor="middle" font-size="13" font-weight="560">Your app</text>
+          <text class="td" x="52" y="143" text-anchor="middle" font-size="10.5">one API, one key</text>
+
+          <line class="flow" x1="104" y1="130" x2="152" y2="130" marker-end="url(#arwA)"/>
+
+          <rect class="hub" x="156" y="96" width="104" height="68" rx="10"/>
+          <text class="ta" x="208" y="122" text-anchor="middle" font-size="13.5" font-weight="640">crossbar</text>
+          <text class="tm" x="208" y="138" text-anchor="middle" font-size="10">picks &#183; translates</text>
+          <text class="tm" x="208" y="151" text-anchor="middle" font-size="10">retries &#183; meters</text>
+
+          <path class="flow" d="M264 116 C292 116 292 46 316 46" marker-end="url(#arwA)"/>
+          <path class="fallback" d="M264 130 C292 130 292 130 316 130" marker-end="url(#arw)"/>
+          <path class="fallback" d="M264 144 C292 144 292 214 316 214" marker-end="url(#arw)"/>
+
+          <rect class="box" x="320" y="26" width="96" height="40" rx="8"/>
+          <text class="t" x="368" y="45" text-anchor="middle" font-size="12">Anthropic</text>
+          <text class="td" x="368" y="58" text-anchor="middle" font-size="9.5">Claude</text>
+
+          <rect class="box" x="320" y="110" width="96" height="40" rx="8"/>
+          <text class="t" x="368" y="129" text-anchor="middle" font-size="12">OpenAI</text>
+          <text class="td" x="368" y="142" text-anchor="middle" font-size="9.5">GPT</text>
+
+          <rect class="box" x="320" y="194" width="96" height="40" rx="8"/>
+          <text class="t" x="368" y="213" text-anchor="middle" font-size="12">&#8230;more</text>
+          <text class="td" x="368" y="226" text-anchor="middle" font-size="9.5">one file each</text>
+
+          <text class="ta" x="286" y="88" text-anchor="middle" font-size="9.5">chosen</text>
+          <text class="td" x="292" y="178" text-anchor="middle" font-size="9.5">fallbacks</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="shead" style="margin-top:44px"><div><h2>Do I need my own keys?</h2></div></div>
+    <div class="faq">
+      <div class="q">
+        <h4>Short answer: yes, for real models.</h4>
+        <p>crossbar doesn't sell access to models — it routes to providers <em>you</em> have accounts
+           with. It is the plumbing, not the supplier. So it needs your Anthropic or OpenAI key in
+           order to reach Claude or GPT on your behalf.</p>
+        <p>The one exception is <code>crossbar/echo</code>, a built-in demo model that answers
+           without calling anyone. It needs nothing, and it's what the playground uses.</p>
+      </div>
+
+      <div class="q">
+        <h4>There are two different kinds of key, which trips everyone up</h4>
+        <div class="keytable">
+          <code>CROSSBAR_API_KEYS</code>
+          <span><b>Your gateway's key.</b> Controls who is allowed to use your crossbar. You make
+            this one up. Clients send it as <code>Authorization: Bearer …</code>.</span>
+          <code>ANTHROPIC_API_KEY</code>
+          <span><b>A provider key.</b> Lets crossbar reach Claude. Stays on your server; clients
+            never see it.</span>
+          <code>OPENAI_API_KEY</code>
+          <span><b>A provider key.</b> Same idea, for GPT.</span>
+        </div>
+        <p style="margin-top:12px">Clients only ever hold the first one. That's the point: you can
+           hand out or revoke gateway keys per app without ever exposing the provider credentials
+           behind them.</p>
+      </div>
+
+      <div class="q">
+        <h4>What about this hosted demo?</h4>
+        <p>It has <em>no</em> provider keys configured, so <code>crossbar/echo</code> works and real
+           models come back <code>401</code> from the provider. That failure is honest: routing and
+           translation ran, the credentials simply weren't there. Run it yourself with your own keys
+           to reach real models — they never leave your machine.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section id="start">
   <div class="wrap">
@@ -350,7 +486,7 @@ pnpm dev   <span class="c"># http://localhost:8080</span></pre></div>
           <select id="pg-model"></select>
         </div>
         <div class="field">
-          <label for="pg-key">API key</label>
+          <label for="pg-key">crossbar key <span style="text-transform:none;letter-spacing:0">&mdash; not a provider key</span></label>
           <input id="pg-key" spellcheck="false" placeholder="sk-...">
         </div>
         <div class="field">

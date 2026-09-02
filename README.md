@@ -3,11 +3,37 @@
 An OpenRouter-style LLM routing gateway. One API key, one wire format, many
 upstream providers, with automatic routing and failover.
 
+**In plain terms:** every AI provider has its own API, so using Claude *and* GPT
+means writing the integration twice, holding two sets of credentials, and going
+down whenever whichever one you picked goes down. crossbar sits in front of
+them. You send it one kind of request; it decides which provider should handle
+it, rewrites the request into that provider's own format, and hands the answer
+back in the shape you already expect. If a provider is rate-limited or erroring,
+it moves to another one mid-request and your app just sees a normal reply.
+
 Speak the OpenAI Chat Completions API at crossbar, name a model as
-`provider/model`, and crossbar picks an upstream endpoint by policy, translates
-the request into that provider's native dialect, streams the response back
+`provider/model`, and it picks an upstream endpoint by policy, translates the
+request into that provider's native dialect, streams the response back
 re-normalized into OpenAI SSE chunks, cascades to the next candidate on failure,
 and records tokens and cost for every generation.
+
+### Do I need my own API keys?
+
+Yes, for real models: crossbar routes to providers *you* have accounts with — it
+is the plumbing, not the supplier. There are two different kinds of key, which
+is the part that trips people up:
+
+| Variable | What it is |
+|---|---|
+| `CROSSBAR_API_KEYS` | **Your gateway's key.** You make it up; it controls who may use your crossbar. Clients send it as `Authorization: Bearer …`. |
+| `CROSSBAR_FREE_API_KEYS` | Gateway keys restricted to zero-cost endpoints. Safe to publish. |
+| `ANTHROPIC_API_KEY` | **A provider key**, so crossbar can reach Claude. Stays on your server; clients never see it. |
+| `OPENAI_API_KEY` | **A provider key**, for GPT. |
+
+Clients only ever hold a gateway key, so you can issue and revoke them per app
+without exposing the provider credentials behind them. The one model that needs
+no credentials at all is `crossbar/echo`, a built-in demo model that answers
+without calling anyone.
 
 **Live:** <https://crossbar-eta.vercel.app>
 
