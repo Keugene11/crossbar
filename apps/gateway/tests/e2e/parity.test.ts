@@ -310,3 +310,86 @@ describe("key info", () => {
     expect(((await bob.json()) as any).data.usage_details.requests).toBe(0);
   });
 });
+
+describe("middle-out transform", () => {
+  const filler = (label: string) => `${label} ${"x".repeat(2000)}`;
+
+  function longConversation() {
+    const messages: any[] = [{ role: "system", content: "Be terse." }];
+    for (let i = 0; i < 40; i++) {
+      messages.push({ role: "user", content: filler(`u${i}`) });
+      messages.push({ role: "assistant", content: filler(`a${i}`) });
+    }
+    messages.push({ role: "user", content: "the actual question" });
+    return messages;
+  }
+
+  it("413s an over-long request when no transform is requested", async () => {
+    harness = await createHarness({
+      seed: [
+        {
+          id: "tiny/model",
+          name: "Tiny window",
+          contextLength: 2_000,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          endpoints: [
+            {
+              provider: "anthropic",
+              upstreamModelId: "cheap-anthropic",
+              pricePrompt: 1,
+              priceCompletion: 1,
+              maxOutputTokens: 256,
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await postChat(harness.app, {
+      model: "tiny/model",
+      messages: longConversation(),
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it("compresses to fit when middle-out is requested, and says how much it dropped", async () => {
+    harness = await createHarness({
+      seed: [
+        {
+          id: "tiny/model",
+          name: "Tiny window",
+          contextLength: 2_000,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          endpoints: [
+            {
+              provider: "anthropic",
+              upstreamModelId: "cheap-anthropic",
+              pricePrompt: 1,
+              priceCompletion: 1,
+              maxOutputTokens: 256,
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await postChat(harness.app, {
+      model: "tiny/model",
+      messages: longConversation(),
+      transforms: ["middle-out"],
+      stream: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(Number(res.headers.get("x-crossbar-dropped-messages"))).toBeGreaterThan(0);
+
+    // The upstream saw the compressed conversation, with its edges intact.
+    const sent = harness.anthropic.received[0]!.body as any;
+    expect(sent.system).toEqual([{ type: "text", text: "Be terse." }]);
+    const last = sent.messages.at(-1);
+    expect(JSON.stringify(last)).toContain("the actual question");
+    await readSse(res);
+  });
+});

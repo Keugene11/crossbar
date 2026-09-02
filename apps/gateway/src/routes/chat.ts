@@ -9,6 +9,7 @@ import { buildCandidates } from "../routing/candidates.js";
 import { executeCascade, MidStreamError } from "../routing/execute.js";
 import { AUTO_MODEL_ID, resolveAuto } from "../routing/auto.js";
 import { estimatePromptTokens } from "../routing/tokens.js";
+import { applyTransforms } from "../routing/transforms.js";
 import { applyVariant, parseModelRef, requiredCapabilities } from "../routing/variants.js";
 import { defaultProviderPreferences } from "../schemas/routing.js";
 import {
@@ -17,7 +18,14 @@ import {
   type FinishReason,
   type Usage,
 } from "../schemas/openai.js";
-import { SSE_DONE, SSE_HEADERS, sseChunk, sseData } from "../stream/sse.js";
+import {
+  KEEPALIVE_INTERVAL_MS,
+  SSE_DONE,
+  SSE_HEADERS,
+  sseChunk,
+  sseData,
+  sseKeepAlive,
+} from "../stream/sse.js";
 
 function parseRequest(body: unknown): ChatCompletionRequest {
   const parsed = ChatCompletionRequest.safeParse(body);
@@ -102,6 +110,20 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
       modelId = chosen;
     }
 
+    // Transforms run against the roomiest endpoint the model has: compressing
+    // to fit the smallest one would discard context the request never needed
+    // to lose.
+    const widest = Math.max(
+      0,
+      ...deps.catalog.endpointsFor(modelId).map((e) => e.contextLength),
+    );
+    const transformed = applyTransforms(
+      request,
+      widest,
+      request.max_completion_tokens ?? request.max_tokens ?? 0,
+    );
+    const routed = transformed.request;
+
     const plan = buildCandidates(
       deps.catalog,
       modelId,
@@ -110,8 +132,8 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
       { stats: deps.stats, random: deps.random ?? Math.random },
       requiredCapabilities(request),
       {
-        promptTokens: estimatePromptTokens(request),
-        maxOutputTokens: request.max_completion_tokens ?? request.max_tokens ?? 0,
+        promptTokens: estimatePromptTokens(routed),
+        maxOutputTokens: routed.max_completion_tokens ?? routed.max_tokens ?? 0,
       },
     );
 
@@ -134,7 +156,7 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     let result;
     try {
       result = await executeCascade(
-        request,
+        routed,
         plan.endpoints,
         {
           providers: deps.providers,
@@ -148,7 +170,7 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
       const e = err instanceof CrossbarError ? err : undefined;
       await finish({
         endpoint: null,
-        streamed: request.stream,
+        streamed: routed.stream,
         finishReason: "error",
         usage: null,
         latencyMs: Date.now() - startedAt,
@@ -181,8 +203,10 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
 
     return streamResponse(c, {
       genId,
-      headers,
-      request,
+      headers: transformed.dropped
+        ? { ...headers, "x-crossbar-dropped-messages": String(transformed.dropped) }
+        : headers,
+      request: routed,
       result,
       startedAt,
       finish,
@@ -213,6 +237,9 @@ function streamResponse(c: Context<AppEnv>, args: StreamArgs): Response {
   // A generation is recorded exactly once. `start` and `cancel` can both run
   // for the same stream (client hangs up mid-flush), and a second insert would
   // collide on the primary key.
+  // Hoisted so `cancel` can clear it: cancel runs outside `start`'s scope, and
+  // a surviving interval would keep writing into a closed controller.
+  let keepalive: ReturnType<typeof setInterval> | undefined;
   let recorded = false;
   const recordOnce = (
     draft: Omit<GenerationDraft, "id" | "keyId" | "requestedModel" | "appReferer" | "appTitle">,
@@ -227,14 +254,25 @@ function streamResponse(c: Context<AppEnv>, args: StreamArgs): Response {
       // Once the client is gone `enqueue` throws. That must not abort the rest
       // of this function -- the ledger write still has to happen.
       let open = true;
+      let lastWriteAt = Date.now();
       const write = (s: string): void => {
         if (!open) return;
         try {
           controller.enqueue(encoder.encode(s));
+          lastWriteAt = Date.now();
         } catch {
           open = false;
         }
       };
+
+      // A model that thinks for a minute before its first token looks like an
+      // idle connection to every load balancer in between. A comment frame is
+      // invisible to clients and keeps the connection from being dropped.
+      keepalive = setInterval(() => {
+        if (open && Date.now() - lastWriteAt >= KEEPALIVE_INTERVAL_MS) write(sseKeepAlive());
+      }, KEEPALIVE_INTERVAL_MS);
+      // Never hold the process open on this timer alone.
+      keepalive.unref?.();
 
       try {
         for await (const chunk of result.stream) {
@@ -271,6 +309,7 @@ function streamResponse(c: Context<AppEnv>, args: StreamArgs): Response {
         write(sseData(toErrorEnvelope(errored).body));
       }
 
+      clearInterval(keepalive);
       write(SSE_DONE);
       // Recorded before the stream closes so the ledger is readable the moment
       // the client sees [DONE].
@@ -290,6 +329,7 @@ function streamResponse(c: Context<AppEnv>, args: StreamArgs): Response {
     },
 
     cancel() {
+      clearInterval(keepalive);
       // Client hung up mid-stream; nothing more to write, but the partial
       // generation still belongs in the ledger.
       void recordOnce({

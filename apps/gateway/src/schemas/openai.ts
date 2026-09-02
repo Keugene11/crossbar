@@ -146,6 +146,11 @@ export const ChatCompletionRequest = z
     provider: ProviderPreferences.optional(),
     /** Force usage accounting into the final streamed chunk. */
     usage: z.object({ include: z.boolean() }).optional(),
+    /**
+     * Prompt transforms applied when the request would not otherwise fit.
+     * Opt-in: dropping a caller's context silently is not a safe default.
+     */
+    transforms: z.array(z.enum(["middle-out"])).max(4).optional(),
     /** Spend ceiling for `crossbar/auto`. Ignored for a named model. */
     cost_tier: z.enum(["low", "medium", "high", "max"]).optional(),
     /** Restrict `crossbar/auto` to these ids or `author/*` prefixes. */

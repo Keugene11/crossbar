@@ -69,6 +69,12 @@ Beyond the OpenAI request body, crossbar accepts:
 - **`HTTP-Referer` / `X-Title`** — app attribution, recorded per generation.
 - **`cost_tier` / `allowed_models`** — spend ceiling and allowlist for the auto
   router.
+- **`transforms: ["middle-out"]`** — compress an over-long prompt to fit instead
+  of failing it. Opt-in on purpose: dropped turns are invisible in the response
+  and the model answers confidently without them, so it is not a safe default.
+  Every system message and the final turn always survive, and a `tool` result is
+  never orphaned from its call. The count lands in
+  `X-Crossbar-Dropped-Messages`.
 
 ### The auto router
 
@@ -123,7 +129,9 @@ expired key retires that provider for the request instead of failing it.
 **Sizing.** Every candidate is checked against the request before it is tried:
 an endpoint whose context window cannot hold the prompt plus the requested
 output is skipped rather than attempted. If none can, the request fails 413
-without a single upstream call. The estimate is deliberately approximate — it
+without a single upstream call — or, with `transforms: ["middle-out"]`, is
+compressed from the middle until it fits (recall is strongest at the edges of a
+window, so the instructions and the most recent turns are what to keep). The estimate is deliberately approximate — it
 answers "can this possibly fit", not "what will this cost"; billing always uses
 the counts the provider reports back.
 
@@ -201,7 +209,7 @@ src/
   schemas/      Zod contracts -- the OpenAI wire format is the internal one too
   registry/     catalog cache + seed data
   routing/      candidates -> select -> execute (the cascade)
-                auto router, variants, token sizing, health stats
+                auto router, variants, token sizing, transforms, health stats
   providers/    anthropic/ (dialect translation), openai/ (reference), classify
   accounting/   cost math and the generation ledger
   db/           Drizzle schema, migrations, dual PGlite / node-postgres driver
@@ -210,7 +218,7 @@ src/
 ## Tests
 
 ```bash
-pnpm test         # 134 tests, no network, no ports
+pnpm test         # 144 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```

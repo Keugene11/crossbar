@@ -1,4 +1,3 @@
-import type { ErrorEnvelope } from "../errors.js";
 import type { ChatCompletionChunk } from "../schemas/openai.js";
 
 export const SSE_HEADERS = {
@@ -26,14 +25,11 @@ export function sseKeepAlive(): string {
 }
 
 /**
- * Terminal error inside an already-open stream.
+ * How long a stream may go silent before a keep-alive comment is sent.
  *
- * The status line was sent long ago, so the only way to tell the client is a
- * final data frame. `[DONE]` still follows, so well-behaved clients terminate
- * cleanly instead of hanging.
+ * Well under the 30-60s idle timeout typical of load balancers and reverse
+ * proxies, which would otherwise drop a connection during a long think.
  */
-export function sseError(envelope: ErrorEnvelope): string {
-  return sseData(envelope);
-}
+export const KEEPALIVE_INTERVAL_MS = 15_000;
 
 export const SSE_DONE = "data: [DONE]\n\n";
