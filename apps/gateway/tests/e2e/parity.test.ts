@@ -482,3 +482,29 @@ describe("prompt caching passthrough", () => {
     expect(sent.messages[0].content[1].cache_control).toBeUndefined();
   });
 });
+
+describe("catalog is public, accounting is not", () => {
+  it("serves models and providers without a key", async () => {
+    // Model ids, pricing and provider policies are what a caller consults to
+    // decide whether to sign up at all; gating them behind a key is backwards.
+    harness = await createHarness({ apiKeys: ["sk-secret"] });
+
+    expect((await harness.app.request("/v1/models")).status).toBe(200);
+    expect((await harness.app.request("/v1/providers")).status).toBe(200);
+    expect((await harness.app.request("/v1/models/test/dual")).status).toBe(200);
+    expect((await harness.app.request("/v1/models/test/dual/endpoints")).status).toBe(200);
+    expect((await harness.app.request("/api/v1/models")).status).toBe(200);
+  });
+
+  it("still gates everything that touches spend or history", async () => {
+    harness = await createHarness({ apiKeys: ["sk-secret"] });
+
+    for (const path of ["/v1/key", "/v1/activity", "/v1/generation?id=gen_x"]) {
+      expect((await harness.app.request(path)).status, path).toBe(401);
+    }
+    expect(
+      (await postChat(harness.app, { model: "test/dual", messages: [{ role: "user", content: "hi" }] }))
+        .status,
+    ).toBe(401);
+  });
+});

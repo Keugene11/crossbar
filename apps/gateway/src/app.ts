@@ -122,6 +122,19 @@ export function createApp(deps: AppDeps): App {
     );
   });
 
+  // The catalog is public, as it is on OpenRouter: model ids, pricing and
+  // provider policies are what a caller consults to decide whether to sign up
+  // at all, so gating them behind a key is backwards. Everything that touches
+  // spend or history stays authenticated.
+  const publicV1 = new Hono<AppEnv>();
+  publicV1.onError(onError);
+  publicV1.use("*", async (c, next) => {
+    c.set("keyId", null);
+    return next();
+  });
+  registerModelRoutes(publicV1, deps);
+  registerProviderRoutes(publicV1, deps);
+
   const v1 = new Hono<AppEnv>();
   v1.onError(onError);
   // Body limit runs before auth: rejecting an oversized body must not require
@@ -149,15 +162,16 @@ export function createApp(deps: AppDeps): App {
   // by a header they control.
   v1.use("*", rateLimit(createRateLimiter({ requestsPerMinute: deps.rateLimitRpm ?? 0 })));
 
-  registerModelRoutes(v1, deps);
   registerChatRoute(v1, deps);
   registerGenerationRoute(v1, deps);
   registerKeyRoute(v1, deps);
-  registerProviderRoutes(v1, deps);
   registerActivityRoute(v1, deps);
   // Registered last: it re-enters the chat route, which must already exist.
   registerCompletionRoute(v1, deps);
 
+  // Public routes mount first so the catalog resolves before the auth gate.
+  app.route("/v1", publicV1);
+  app.route("/api/v1", publicV1);
   app.route("/v1", v1);
   // OpenRouter serves its API under /api/v1; accepting both means a client can
   // repoint at crossbar by changing the host alone.

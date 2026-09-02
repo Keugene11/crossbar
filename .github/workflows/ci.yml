@@ -26,6 +26,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Covers both the gateway and the serverless entrypoint: Vercel
+      # type-checks api/ against the root tsconfig, and that drifted once.
       - name: Typecheck
         run: pnpm typecheck
 

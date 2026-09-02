@@ -9,7 +9,8 @@
     "start": "pnpm --filter @crossbar/gateway start",
     "test": "pnpm --filter @crossbar/gateway test",
     "test:live": "pnpm --filter @crossbar/gateway test:live",
-    "typecheck": "pnpm --filter @crossbar/gateway typecheck",
+    "typecheck": "pnpm --filter @crossbar/gateway typecheck && pnpm typecheck:api",
+    "typecheck:api": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "pnpm --filter @crossbar/gateway db:migrate",
     "db:seed": "pnpm --filter @crossbar/gateway db:seed",
     "db:generate": "pnpm --filter @crossbar/gateway db:generate"
@@ -22,6 +23,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
   }
 }
