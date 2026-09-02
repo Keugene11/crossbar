@@ -1,0 +1,19 @@
+# Optional. crossbar defaults to PGlite (embedded Postgres) when DATABASE_URL is unset.
+# Bring this up and export DATABASE_URL to run against a real server instead:
+#   docker compose up -d
+#   export DATABASE_URL=postgres://crossbar:crossbar@localhost:5432/crossbar
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: crossbar
+      POSTGRES_PASSWORD: crossbar
+      POSTGRES_DB: crossbar
+    ports: ["5432:5432"]
+    volumes: ["crossbar-pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crossbar"]
+      interval: 5s
+      retries: 10
+volumes:
+  crossbar-pgdata:

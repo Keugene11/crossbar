@@ -1,0 +1,17 @@
+{
+  "name": "crossbar",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "dev": "pnpm --filter @crossbar/gateway dev",
+    "build": "pnpm --filter @crossbar/gateway build",
+    "start": "pnpm --filter @crossbar/gateway start",
+    "test": "pnpm --filter @crossbar/gateway test",
+    "test:live": "pnpm --filter @crossbar/gateway test:live",
+    "typecheck": "pnpm --filter @crossbar/gateway typecheck",
+    "db:migrate": "pnpm --filter @crossbar/gateway db:migrate",
+    "db:seed": "pnpm --filter @crossbar/gateway db:seed",
+    "db:generate": "pnpm --filter @crossbar/gateway db:generate"
+  }
+}

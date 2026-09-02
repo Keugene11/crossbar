@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+
+allowBuilds:
+  esbuild: true
+
+# drizzle-kit still pulls the deprecated @esbuild-kit chain, which pins an
+# esbuild carrying GHSA-67mh-4wv8-2f99 (dev-server SSRF). We never run esbuild's
+# dev server, but there is no reason to ship a known-vulnerable version.
+overrides:
+  esbuild@<0.25.0: ">=0.25.0"
+
+# Published within the supply-chain minimum-release-age window; reviewed and
+# accepted deliberately -- it is the first SDK release with output_config.
+minimumReleaseAgeExclude:
+  - "@anthropic-ai/sdk"

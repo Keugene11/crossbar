@@ -1,0 +1,36 @@
+{
+  "name": "@crossbar/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude '**/live/**'",
+    "test:watch": "vitest",
+    "test:live": "LIVE=1 vitest run tests/live",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
+    "@electric-sql/pglite": "^0.3.0",
+    "@hono/node-server": "^1.14.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.7.0",
+    "openai": "^7.8.0",
+    "pg": "^8.13.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
