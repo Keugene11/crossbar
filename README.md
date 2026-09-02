@@ -45,12 +45,14 @@ by changing the host alone.
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-compatible completions, buffered or streaming |
+| `POST /v1/completions` | Legacy text completions, for older clients |
 | `GET /v1/models` | Catalog with per-endpoint pricing and capabilities |
 | `GET /v1/models/:author/:slug` | One model |
 | `GET /v1/models/:author/:slug/endpoints` | Endpoint-level detail for one model |
 | `GET /v1/generation?id=` | Tokens, cost, latency, and the full attempt list |
 | `GET /v1/key` | The calling key's own usage and rate limit |
 | `GET /v1/providers` | Provider directory with data-retention policy |
+| `GET /v1/activity?days=` | Daily usage rolled up by model and provider |
 | `GET /health` | Liveness (no auth) |
 
 Beyond the OpenAI request body, crossbar accepts:
@@ -182,6 +184,13 @@ routing decision.
   swept, since unauthenticated callers are keyed by a header they control.
 - `pnpm audit` is clean, and CI runs it on every push.
 
+`/v1/completions` is a thin shim: the prompt becomes a single user message and
+the request re-enters the chat pipeline, so routing, failover, rate limiting and
+the ledger have exactly one implementation between them. `/v1/activity`
+aggregates in SQL rather than loading rows — a busy key accumulates millions of
+generations, and summing them in memory would turn a reporting endpoint into an
+outage.
+
 ## Deploying
 
 ```bash
@@ -220,7 +229,7 @@ OpenAI-compatible server — and the adapter keeps one client per host.
 
 ```
 src/
-  routes/       chat, models, generation, health
+  routes/       chat, completions, models, providers, generation, key, activity
   schemas/      Zod contracts -- the OpenAI wire format is the internal one too
   registry/     catalog cache + seed data
   routing/      candidates -> select -> execute (the cascade)
@@ -233,7 +242,7 @@ src/
 ## Tests
 
 ```bash
-pnpm test         # 149 tests, no network, no ports
+pnpm test         # 161 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```

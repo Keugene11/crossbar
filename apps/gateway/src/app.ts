@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthVariables } from "./auth.js";
 import { auth } from "./auth.js";
@@ -9,7 +9,9 @@ import { CrossbarError, toErrorEnvelope } from "./errors.js";
 import type { ProviderRegistry } from "./providers/types.js";
 import type { Catalog } from "./registry/catalog.js";
 import type { StatsTracker } from "./routing/stats.js";
+import { registerActivityRoute } from "./routes/activity.js";
 import { registerChatRoute } from "./routes/chat.js";
+import { registerCompletionRoute } from "./routes/completions.js";
 import { registerGenerationRoute } from "./routes/generation.js";
 import { registerKeyRoute } from "./routes/key.js";
 import { registerModelRoutes } from "./routes/models.js";
@@ -48,7 +50,15 @@ export type App = Hono<AppEnv>;
 export function createApp(deps: AppDeps): App {
   const app = new Hono<AppEnv>();
 
-  app.onError((err, c) => {
+  /**
+   * Shared error renderer.
+   *
+   * Registered on the sub-app as well as the root: `/v1/completions` re-enters
+   * the app through `/v1/chat/completions`, and a sub-app without its own
+   * handler rethrows instead of returning a Response -- which surfaced a
+   * clean 401 from a provider as an opaque 500.
+   */
+  const onError = (err: unknown, c: Context<AppEnv>): Response => {
     const { status, body } = toErrorEnvelope(err);
     // Failures are traceable too: the id is on the response even when no
     // endpoint ever produced output, so /v1/generation still explains why.
@@ -63,7 +73,9 @@ export function createApp(deps: AppDeps): App {
     // goes nowhere; 499 exists only for the generation record.
     if (status === 499) return c.body(null, 499 as never, headers);
     return c.json(body, status as never, headers);
-  });
+  };
+
+  app.onError(onError);
 
   app.notFound((c) =>
     c.json(
@@ -105,6 +117,7 @@ export function createApp(deps: AppDeps): App {
   });
 
   const v1 = new Hono<AppEnv>();
+  v1.onError(onError);
   // Body limit runs before auth: rejecting an oversized body must not require
   // buffering it first, and must not depend on the caller being authenticated.
   v1.use(
@@ -135,6 +148,9 @@ export function createApp(deps: AppDeps): App {
   registerGenerationRoute(v1, deps);
   registerKeyRoute(v1, deps);
   registerProviderRoutes(v1, deps);
+  registerActivityRoute(v1, deps);
+  // Registered last: it re-enters the chat route, which must already exist.
+  registerCompletionRoute(v1, deps);
 
   app.route("/v1", v1);
   // OpenRouter serves its API under /api/v1; accepting both means a client can
