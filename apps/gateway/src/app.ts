@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AuthVariables } from "./auth.js";
 import { auth } from "./auth.js";
 import { createRateLimiter, rateLimit } from "./rate-limit.js";
 import type { DB } from "./db/client.js";
+import type { GenerationStore } from "./store/types.js";
 import { CrossbarError, toErrorEnvelope } from "./errors.js";
 import type { ProviderRegistry } from "./providers/types.js";
 import type { Catalog } from "./registry/catalog.js";
@@ -26,7 +26,9 @@ import { registerProviderRoutes } from "./routes/providers.js";
 export const MAX_BODY_BYTES = 24 * 1024 * 1024;
 
 export interface AppDeps {
-  db: DB;
+  /** Present only when a database is configured; routes read via `store`. */
+  db?: DB | undefined;
+  store: GenerationStore;
   catalog: Catalog;
   providers: ProviderRegistry;
   stats: StatsTracker;
@@ -96,18 +98,22 @@ export function createApp(deps: AppDeps): App {
   // pool while every request failed.
   app.get("/health", async (c) => {
     const models = deps.catalog.snapshot.models.length;
-    let database: "ok" | "unreachable" = "ok";
+    let store: "ok" | "unreachable" = "ok";
     try {
-      await deps.db.execute(sql`select 1`);
+      if (!(await deps.store.ping())) store = "unreachable";
     } catch {
-      database = "unreachable";
+      store = "unreachable";
     }
 
-    const healthy = database === "ok" && models > 0;
+    const healthy = store === "ok" && models > 0;
     return c.json(
       {
         status: healthy ? "ok" : "degraded",
-        database,
+        store: deps.store.kind,
+        // Named rather than hidden: on a non-durable store the ledger does not
+        // survive a restart, and an operator should see that from /health.
+        durable: deps.store.durable,
+        database: store,
         models,
         providers: deps.providers.ids(),
         uptime_s: Math.floor(process.uptime()),

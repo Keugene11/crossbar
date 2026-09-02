@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+**/.pglite
+**/dist
+.git
+.github
+*.log

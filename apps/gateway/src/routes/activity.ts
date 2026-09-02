@@ -1,8 +1,6 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import type { AppDeps, AppEnv } from "../app.js";
 import { microToUsd } from "../accounting/cost.js";
-import { generations } from "../db/schema.js";
 import { CrossbarError } from "../errors.js";
 
 const MAX_DAYS = 90;
@@ -31,33 +29,7 @@ export function registerActivityRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     }
 
     const since = new Date(Date.now() - days * 86_400_000);
-    const keyId = c.get("keyId");
-    const scope = keyId === null
-      ? gte(generations.createdAt, since)
-      : and(gte(generations.createdAt, since), eq(generations.keyId, keyId));
-
-    const day = sql<string>`to_char(${generations.createdAt}, 'YYYY-MM-DD')`;
-
-    const rows = await deps.db
-      .select({
-        date: day,
-        model: generations.requestedModel,
-        provider: generations.provider,
-        requests: sql<number>`count(*)`.mapWith(Number),
-        promptTokens: sql<number>`coalesce(sum(${generations.promptTokens}), 0)`.mapWith(Number),
-        completionTokens:
-          sql<number>`coalesce(sum(${generations.completionTokens}), 0)`.mapWith(Number),
-        costMicro: sql<number>`coalesce(sum(${generations.costMicro}), 0)`.mapWith(Number),
-        // Failures are counted, not hidden: a day that cost nothing because
-        // every request failed should not look like a quiet day.
-        errors: sql<number>`count(*) filter (where ${generations.error} is not null)`.mapWith(
-          Number,
-        ),
-      })
-      .from(generations)
-      .where(scope)
-      .groupBy(day, generations.requestedModel, generations.provider)
-      .orderBy(desc(day));
+    const rows = await deps.store.activity(c.get("keyId") ?? null, since);
 
     return c.json({
       object: "list",

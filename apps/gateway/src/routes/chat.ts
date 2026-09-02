@@ -144,7 +144,7 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     const finish = (
       draft: Omit<GenerationDraft, "id" | "keyId" | "requestedModel" | "appReferer" | "appTitle">,
     ): Promise<void> =>
-      recordGeneration(deps.db, {
+      recordGeneration(deps.store, {
         id: genId,
         keyId,
         appReferer,

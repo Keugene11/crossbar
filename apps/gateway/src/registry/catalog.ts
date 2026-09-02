@@ -1,20 +1,30 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "../db/client.js";
-import { endpoints as endpointsTable, models as modelsTable } from "../db/schema.js";
-import type { EndpointRow, ModelRow } from "../db/schema.js";
+import {
+  endpoints as endpointsTable,
+  models as modelsTable,
+  providers as providersTable,
+} from "../db/schema.js";
+import type { EndpointRow, ModelRow, ProviderRow } from "../db/schema.js";
 import { CrossbarError } from "../errors.js";
 
 export type Endpoint = EndpointRow;
 export type Model = ModelRow;
+export type Provider = ProviderRow;
 
 export interface CatalogSnapshot {
+  providers: Provider[];
   models: Model[];
   byModelId: Map<string, Model>;
   endpointsByModelId: Map<string, Endpoint[]>;
   byEndpointId: Map<string, Endpoint>;
 }
 
-function buildSnapshot(models: Model[], endpoints: Endpoint[]): CatalogSnapshot {
+function buildSnapshot(
+  models: Model[],
+  endpoints: Endpoint[],
+  providers: Provider[] = [],
+): CatalogSnapshot {
   models.sort((a, b) => a.id.localeCompare(b.id));
   const byModelId = new Map(models.map((m) => [m.id, m]));
   const endpointsByModelId = new Map<string, Endpoint[]>();
@@ -38,7 +48,8 @@ function buildSnapshot(models: Model[], endpoints: Endpoint[]): CatalogSnapshot 
           (b.pricePromptMicro + b.priceCompletionMicro) || a.id.localeCompare(b.id),
     );
   }
-  return { models, byModelId, endpointsByModelId, byEndpointId };
+  providers.sort((a, b) => a.id.localeCompare(b.id));
+  return { providers, models, byModelId, endpointsByModelId, byEndpointId };
 }
 
 /**
@@ -47,22 +58,52 @@ function buildSnapshot(models: Model[], endpoints: Endpoint[]): CatalogSnapshot 
  * The request path reads only from here -- routing a completion must never wait
  * on Postgres.
  */
+/** Where a catalog snapshot comes from. */
+export type CatalogSource = () => Promise<{
+  models: Model[];
+  endpoints: Endpoint[];
+  providers: Provider[];
+}>;
+
+export function databaseSource(db: DB): CatalogSource {
+  return async () => {
+    const [models, endpoints, providers] = await Promise.all([
+      db.select().from(modelsTable),
+      db.select().from(endpointsTable).where(eq(endpointsTable.status, "active")),
+      db.select().from(providersTable),
+    ]);
+    return { models, endpoints, providers };
+  };
+}
+
+/**
+ * A fixed snapshot, for deployments with no database.
+ *
+ * The catalog is static configuration rather than mutable state, so serving it
+ * from the compiled-in seed loses nothing except the ability to edit it at
+ * runtime -- which a serverless instance could not do anyway.
+ */
+export function staticSource(
+  models: Model[],
+  endpoints: Endpoint[],
+  providers: Provider[],
+): CatalogSource {
+  return async () => ({ models, endpoints, providers });
+}
+
 export class Catalog {
-  #snapshot: CatalogSnapshot = buildSnapshot([], []);
+  #snapshot: CatalogSnapshot = buildSnapshot([], [], []);
   #loadedAt = 0;
   #inflight: Promise<void> | undefined;
+  readonly #source: CatalogSource;
 
-  constructor(
-    private readonly db: DB,
-    private readonly ttlMs: number,
-  ) {}
+  constructor(source: CatalogSource | DB, private readonly ttlMs: number) {
+    this.#source = typeof source === "function" ? source : databaseSource(source as DB);
+  }
 
   async refresh(): Promise<void> {
-    const [models, endpoints] = await Promise.all([
-      this.db.select().from(modelsTable),
-      this.db.select().from(endpointsTable).where(eq(endpointsTable.status, "active")),
-    ]);
-    this.#snapshot = buildSnapshot(models, endpoints);
+    const { models, endpoints, providers } = await this.#source();
+    this.#snapshot = buildSnapshot(models, endpoints, providers);
     this.#loadedAt = Date.now();
   }
 

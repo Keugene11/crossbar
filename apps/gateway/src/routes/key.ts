@@ -1,8 +1,6 @@
-import { count, eq, sql, sum } from "drizzle-orm";
 import type { Hono } from "hono";
 import type { AppDeps, AppEnv } from "../app.js";
 import { microToUsd } from "../accounting/cost.js";
-import { generations } from "../db/schema.js";
 
 /**
  * Information about the calling key, mirroring OpenRouter's `/api/v1/key`.
@@ -15,16 +13,7 @@ export function registerKeyRoute(app: Hono<AppEnv>, deps: AppDeps): void {
   app.get("/key", async (c) => {
     const keyId = c.get("keyId");
 
-    const scoped = keyId === null ? undefined : eq(generations.keyId, keyId);
-    const [totals] = await deps.db
-      .select({
-        requests: count(),
-        costMicro: sum(generations.costMicro).mapWith(Number),
-        promptTokens: sum(generations.promptTokens).mapWith(Number),
-        completionTokens: sum(generations.completionTokens).mapWith(Number),
-      })
-      .from(generations)
-      .where(scoped ?? sql`true`);
+    const totals = await deps.store.usage(keyId);
 
     return c.json({
       data: {
@@ -38,11 +27,11 @@ export function registerKeyRoute(app: Hono<AppEnv>, deps: AppDeps): void {
           requests: deps.rateLimitRpm ?? 0,
           interval: "1m",
         },
-        usage: microToUsd(totals?.costMicro ?? 0),
+        usage: microToUsd(totals.costMicro),
         usage_details: {
-          requests: totals?.requests ?? 0,
-          prompt_tokens: totals?.promptTokens ?? 0,
-          completion_tokens: totals?.completionTokens ?? 0,
+          requests: totals.requests,
+          prompt_tokens: totals.promptTokens,
+          completion_tokens: totals.completionTokens,
         },
       },
     });

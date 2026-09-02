@@ -7,6 +7,7 @@ import { OpenAIAdapter } from "../../src/providers/openai/index.js";
 import { ProviderRegistry } from "../../src/providers/types.js";
 import { Catalog } from "../../src/registry/catalog.js";
 import { StatsTracker } from "../../src/routing/stats.js";
+import { PostgresStore } from "../../src/store/postgres.js";
 import { joinContent, postChat, readSse } from "../helpers.js";
 
 /**
@@ -34,6 +35,7 @@ async function liveApp() {
 
   const app = createApp({
     db: db.db,
+    store: new PostgresStore(db.db),
     catalog,
     providers,
     stats: new StatsTracker(),

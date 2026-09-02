@@ -1,8 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import type { AppDeps, AppEnv } from "../app.js";
 import { microToUsd } from "../accounting/cost.js";
-import { generations } from "../db/schema.js";
 import { CrossbarError } from "../errors.js";
 
 export function registerGenerationRoute(app: Hono<AppEnv>, deps: AppDeps): void {
@@ -21,10 +19,7 @@ export function registerGenerationRoute(app: Hono<AppEnv>, deps: AppDeps): void 
     // logs, and proxies, so treating one as a bearer capability would let any
     // leaked id read another tenant's routing and spend history. 404 rather
     // than 403: a distinct status would confirm the id exists.
-    const keyId = c.get("keyId");
-    const owned = keyId === null ? eq(generations.id, id) : and(eq(generations.id, id), eq(generations.keyId, keyId));
-
-    const [row] = await deps.db.select().from(generations).where(owned).limit(1);
+    const row = await deps.store.get(id, c.get("keyId") ?? null);
     if (!row) {
       throw new CrossbarError({
         status: 404,

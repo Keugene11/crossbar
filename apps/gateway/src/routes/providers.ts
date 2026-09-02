@@ -1,6 +1,5 @@
 import type { Hono } from "hono";
 import type { AppDeps, AppEnv } from "../app.js";
-import { providers } from "../db/schema.js";
 
 /**
  * Provider directory, mirroring OpenRouter's `/api/v1/providers`.
@@ -12,8 +11,8 @@ import { providers } from "../db/schema.js";
  */
 export function registerProviderRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.get("/providers", async (c) => {
-    const rows = await deps.db.select().from(providers);
     const snapshot = await deps.catalog.ensureFresh();
+    const rows = snapshot.providers;
 
     // Endpoint counts come from the live catalog, so a provider with every
     // endpoint disabled is visibly serving nothing.
@@ -28,9 +27,7 @@ export function registerProviderRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
 
     return c.json({
       object: "list",
-      data: rows
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .map((p) => ({
+      data: rows.map((p) => ({
           id: p.id,
           name: p.name,
           may_train_on_data: p.mayTrainOnData,
@@ -39,8 +36,8 @@ export function registerProviderRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
           status_page_url: p.statusPageUrl,
           endpoint_count: endpointCount.get(p.id) ?? 0,
           model_count: modelIds.get(p.id)?.size ?? 0,
-          adapter_registered: deps.providers.has(p.id),
-        })),
+        adapter_registered: deps.providers.has(p.id),
+      })),
     });
   });
 }

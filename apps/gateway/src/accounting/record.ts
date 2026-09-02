@@ -1,5 +1,5 @@
-import type { DB } from "../db/client.js";
-import { generations, type NewGeneration } from "../db/schema.js";
+import type { GenerationStore } from "../store/types.js";
+import type { NewGeneration } from "../db/schema.js";
 import type { AttemptRecord } from "../errors.js";
 import type { Endpoint } from "../registry/catalog.js";
 import type { FinishReason, Usage } from "../schemas/openai.js";
@@ -64,9 +64,12 @@ export function toRow(draft: GenerationDraft): NewGeneration {
  * Accounting must never be able to fail a request that already succeeded, so
  * callers fire this without awaiting and errors are logged, not thrown.
  */
-export async function recordGeneration(db: DB, draft: GenerationDraft): Promise<void> {
+export async function recordGeneration(
+  store: GenerationStore,
+  draft: GenerationDraft,
+): Promise<void> {
   try {
-    await db.insert(generations).values(toRow(draft));
+    await store.record(toRow(draft));
   } catch (err) {
     console.error("[crossbar] failed to record generation", draft.id, err);
   }
