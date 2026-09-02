@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { CrossbarError } from "./errors.js";
+import { isExhausted, remainingMicro, type KeyStore } from "./keys/store.js";
 
 /**
  * Stable, non-reversible label for a key.
@@ -45,6 +46,8 @@ export interface AuthVariables {
   keyId: string | null;
   /** "free" keys may only reach zero-cost endpoints. */
   tier: KeyTier;
+  /** Credit remaining in micro-USD; null when the key is unlimited. */
+  creditMicro?: number | null;
 }
 
 /**
@@ -56,18 +59,38 @@ export interface AuthVariables {
  *
  * An empty allowlist disables auth, which is what local dev and tests want.
  */
-export function auth(
-  apiKeys: string[],
-  freeApiKeys: string[] = [],
-): MiddlewareHandler<{ Variables: AuthVariables }> {
+export interface AuthOptions {
+  /** Operator keys from configuration. Unlimited, never metered. */
+  apiKeys: string[];
+  /** Configured keys confined to zero-cost endpoints. */
+  freeApiKeys?: string[];
+  /** Issued keys with credit balances, when a key store is available. */
+  keys?: KeyStore | undefined;
+}
+
+/**
+ * Two sources of truth, on purpose.
+ *
+ * Keys in configuration belong to whoever runs the gateway: unlimited, no
+ * balance, always valid. Issued keys come from the store and carry credit, so
+ * an operator can hand crossbar to other people without handing over the
+ * provider credentials -- which is the entire reason the product exists.
+ */
+export function auth(opts: AuthOptions): MiddlewareHandler<{ Variables: AuthVariables }> {
+  const { apiKeys, freeApiKeys = [], keys } = opts;
   const allowed = apiKeys.map(digest);
   const free = freeApiKeys.map(digest);
   const keyIds = new Map([...apiKeys, ...freeApiKeys].map((k) => [k, keyIdFor(k)]));
+  // Auth is on exactly when keys are configured. The issued-key store only
+  // ever *adds* valid keys -- its presence must not silently lock a local dev
+  // gateway that was deliberately left open.
+  const authDisabled = apiKeys.length === 0 && freeApiKeys.length === 0;
 
   return async (c, next) => {
-    if (apiKeys.length === 0 && freeApiKeys.length === 0) {
+    if (authDisabled) {
       c.set("keyId", null);
       c.set("tier", "full");
+      c.set("creditMicro", null);
       return next();
     }
 
@@ -75,18 +98,35 @@ export function auth(
     const isFree = Boolean(token) && constantTimeIncludes(token!, free);
     const isFull = Boolean(token) && constantTimeIncludes(token!, allowed);
 
-    if (!token || (!isFree && !isFull)) {
-      throw new CrossbarError({
-        status: 401,
-        code: "authentication",
-        message: "Missing or invalid API key. Pass it as `Authorization: Bearer <key>`.",
-        retryable: false,
-      });
+    if (token && (isFree || isFull)) {
+      c.set("keyId", keyIds.get(token) ?? keyIdFor(token));
+      // A key in both lists gets the broader tier; the free list is a floor.
+      c.set("tier", isFull ? "full" : "free");
+      c.set("creditMicro", null);
+      return next();
     }
 
-    c.set("keyId", keyIds.get(token) ?? keyIdFor(token));
-    // A key in both lists gets the broader tier; the free list is a floor.
-    c.set("tier", isFull ? "full" : "free");
-    return next();
+    const issued = token && keys ? await keys.find(token) : undefined;
+    if (issued && !issued.disabled) {
+      if (isExhausted(issued)) {
+        throw new CrossbarError({
+          status: 402,
+          code: "permission",
+          message: "This key is out of credit. Top it up to keep using paid models.",
+          retryable: false,
+        });
+      }
+      c.set("keyId", issued.id);
+      c.set("tier", "full");
+      c.set("creditMicro", remainingMicro(issued));
+      return next();
+    }
+
+    throw new CrossbarError({
+      status: 401,
+      code: "authentication",
+      message: "Missing or invalid API key. Pass it as `Authorization: Bearer <key>`.",
+      retryable: false,
+    });
   };
 }

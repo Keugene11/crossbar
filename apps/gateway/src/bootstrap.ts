@@ -8,6 +8,7 @@ import { Catalog, staticSource, type Endpoint, type Model, type Provider } from 
 import type { DbHandle } from "./db/client.js";
 import { catalogSeed, endpointId, providerSeed, toMicro } from "./registry/seed.js";
 import { StatsTracker } from "./routing/stats.js";
+import { MemoryKeyStore, type KeyStore } from "./keys/store.js";
 import { MemoryStore } from "./store/memory.js";
 import type { GenerationStore } from "./store/types.js";
 
@@ -23,6 +24,7 @@ import type { GenerationStore } from "./store/types.js";
 export interface Bootstrapped {
   app: App;
   store: GenerationStore;
+  keys: KeyStore;
   catalog: Catalog;
   db: DbHandle | undefined;
   close(): Promise<void>;
@@ -110,9 +112,10 @@ export async function bootstrapStateless(cfg: Config = config): Promise<Bootstra
   await catalog.refresh();
 
   const store = new MemoryStore();
-  const app = createApp({ ...commonDeps(cfg), catalog, store });
+  const keys = new MemoryKeyStore();
+  const app = createApp({ ...commonDeps(cfg), catalog, store, keys });
 
-  return { app, store, catalog, db: undefined, close: async () => {} };
+  return { app, store, keys, catalog, db: undefined, close: async () => {} };
 }
 
 /**
@@ -124,10 +127,11 @@ export async function bootstrapStateless(cfg: Config = config): Promise<Bootstra
  * would otherwise pay for, to reach code that cannot run there anyway.
  */
 export async function bootstrapDurable(cfg: Config = config): Promise<Bootstrapped> {
-  const [{ createDb }, { seedCatalog }, { PostgresStore }] = await Promise.all([
+  const [{ createDb }, { seedCatalog }, { PostgresStore }, { PostgresKeyStore }] = await Promise.all([
     import("./db/client.js"),
     import("./db/seed.js"),
     import("./store/postgres.js"),
+    import("./keys/store.js"),
   ]);
 
   const handle = createDb({ url: cfg.databaseUrl ?? cfg.pgliteDir });
@@ -146,9 +150,10 @@ export async function bootstrapDurable(cfg: Config = config): Promise<Bootstrapp
   }
 
   const store = new PostgresStore(handle.db);
-  const app = createApp({ ...commonDeps(cfg), catalog, store, db: handle.db });
+  const keys = new PostgresKeyStore(handle.db);
+  const app = createApp({ ...commonDeps(cfg), catalog, store, keys, db: handle.db });
 
-  return { app, store, catalog, db: handle, close: () => handle.close() };
+  return { app, store, keys, catalog, db: handle, close: () => handle.close() };
 }
 
 /**

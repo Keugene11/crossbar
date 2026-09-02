@@ -7,6 +7,7 @@ import { ProviderRegistry } from "../src/providers/types.js";
 import { Catalog, type Endpoint } from "../src/registry/catalog.js";
 import type { SeedModel } from "../src/registry/seed.js";
 import { StatsTracker } from "../src/routing/stats.js";
+import { PostgresKeyStore } from "../src/keys/store.js";
 import { PostgresStore } from "../src/store/postgres.js";
 import { createFakeUpstream, type FakeUpstream, type FakeUpstreamOptions } from "./fake-upstream/index.js";
 
@@ -117,6 +118,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const app = createApp({
     db: db.db,
     store: new PostgresStore(db.db),
+    keys: new PostgresKeyStore(db.db),
     catalog,
     providers,
     stats,

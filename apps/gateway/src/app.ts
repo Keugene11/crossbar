@@ -5,6 +5,7 @@ import { auth } from "./auth.js";
 import { createRateLimiter, rateLimit } from "./rate-limit.js";
 import type { DB } from "./db/client.js";
 import type { GenerationStore } from "./store/types.js";
+import type { KeyStore } from "./keys/store.js";
 import { CrossbarError, toErrorEnvelope } from "./errors.js";
 import type { ProviderRegistry } from "./providers/types.js";
 import type { Catalog } from "./registry/catalog.js";
@@ -14,6 +15,7 @@ import { registerChatRoute } from "./routes/chat.js";
 import { registerCompletionRoute } from "./routes/completions.js";
 import { registerGenerationRoute } from "./routes/generation.js";
 import { registerKeyRoute } from "./routes/key.js";
+import { registerKeyAdminRoutes } from "./routes/keys.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 
@@ -35,6 +37,8 @@ export interface AppDeps {
   apiKeys: string[];
   /** Keys restricted to zero-cost endpoints. */
   freeApiKeys?: string[];
+  /** Issued keys with credit balances. Absent means config keys only. */
+  keys?: KeyStore | undefined;
   ttftTimeoutMs: number;
   attemptTimeoutMs: number;
   /** Requests per minute per caller. Zero disables the limiter. */
@@ -160,7 +164,7 @@ export function createApp(deps: AppDeps): App {
         ),
     }),
   );
-  v1.use("*", auth(deps.apiKeys, deps.freeApiKeys ?? []));
+  v1.use("*", auth({ apiKeys: deps.apiKeys, freeApiKeys: deps.freeApiKeys ?? [], keys: deps.keys }));
   // After auth, so the bucket is keyed by the authenticated caller rather than
   // by a header they control.
   v1.use("*", rateLimit(createRateLimiter({ requestsPerMinute: deps.rateLimitRpm ?? 0 })));
@@ -168,6 +172,7 @@ export function createApp(deps: AppDeps): App {
   registerChatRoute(v1, deps);
   registerGenerationRoute(v1, deps);
   registerKeyRoute(v1, deps);
+  registerKeyAdminRoutes(v1, deps);
   registerActivityRoute(v1, deps);
   // Registered last: it re-enters the chat route, which must already exist.
   registerCompletionRoute(v1, deps);

@@ -187,10 +187,10 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     // response headers, so a client that immediately calls /v1/generation must
     // not race the insert. recordGeneration swallows its own errors, so this
     // can never turn a successful completion into a failure.
-    const finish = (
+    const finish = async (
       draft: Omit<GenerationDraft, "id" | "keyId" | "requestedModel" | "appReferer" | "appTitle">,
-    ): Promise<void> =>
-      recordGeneration(deps.store, {
+    ): Promise<void> => {
+      const row = await recordGeneration(deps.store, {
         id: genId,
         keyId,
         appReferer,
@@ -198,6 +198,19 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
         requestedModel: request.model,
         ...draft,
       });
+
+      // Debit what was actually charged, not what was estimated. A failed or
+      // zero-completion generation costs nothing, so this is a no-op there --
+      // the ledger and the balance can never disagree.
+      const charged = row.costMicro ?? 0;
+      if (keyId && deps.keys && charged > 0) {
+        try {
+          await deps.keys.debit(keyId, charged);
+        } catch (err) {
+          console.error("[crossbar] failed to debit", keyId, err);
+        }
+      }
+    };
 
     let result;
     try {

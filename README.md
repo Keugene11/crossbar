@@ -19,9 +19,23 @@ and records tokens and cost for every generation.
 
 ### Do I need my own API keys?
 
-Yes, for real models: crossbar routes to providers *you* have accounts with — it
-is the plumbing, not the supplier. There are two different kinds of key, which
-is the part that trips people up:
+**If you are using someone's crossbar: no.** You get a key with credit on it and
+call any model in the catalog. You never need an Anthropic or OpenAI account —
+that relationship belongs to whoever runs the gateway. That is the point.
+
+**If you are running crossbar: yes, once.** You hold the provider credentials,
+and issue keys to everyone else:
+
+```bash
+curl -X POST localhost:8080/v1/keys   -H "Authorization: Bearer $OPERATOR_KEY"   -d '{"label":"my app","credit":5}'
+# -> { "key": "sk-crossbar-...", "limit": 5 }   shown once, only the hash is stored
+```
+
+Each generation debits its real cost from that balance; a key that runs out gets
+`402`, and one that fails is never charged. `GET /v1/credits` reports the
+balance. An issued key cannot manage keys, so it cannot mint itself more credit.
+
+So the two kinds of key are:
 
 | Variable | What it is |
 |---|---|
@@ -29,6 +43,7 @@ is the part that trips people up:
 | `CROSSBAR_FREE_API_KEYS` | Gateway keys restricted to zero-cost endpoints. Safe to publish. |
 | `ANTHROPIC_API_KEY` | **A provider key**, so crossbar can reach Claude. Stays on your server; clients never see it. |
 | `OPENAI_API_KEY` | **A provider key**, for GPT. |
+| issued keys | **Tenant keys** with credit balances, created via `POST /v1/keys`. Stored hashed. |
 
 Clients only ever hold a gateway key, so you can issue and revoke them per app
 without exposing the provider credentials behind them. The one model that needs
@@ -83,6 +98,8 @@ by changing the host alone.
 | `GET /v1/models/:author/:slug/endpoints` | Endpoint-level detail for one model |
 | `GET /v1/generation?id=` | Tokens, cost, latency, and the full attempt list |
 | `GET /v1/key` | The calling key's own usage and rate limit |
+| `GET /v1/credits` | Credit granted, used and remaining |
+| `POST/GET/DELETE /v1/keys` | Issue, list and revoke tenant keys (operator only) |
 | `GET /v1/providers` | Provider directory with data-retention policy |
 | `GET /v1/activity?days=` | Daily usage rolled up by model and provider |
 | `GET /health` | Liveness (no auth) |

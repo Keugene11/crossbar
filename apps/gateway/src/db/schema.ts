@@ -95,6 +95,37 @@ export const endpoints = pgTable(
   (t) => [index("endpoints_model_id_idx").on(t.modelId)],
 );
 
+/**
+ * Issued gateway keys and their credit balance.
+ *
+ * This is what makes crossbar usable by anyone other than its operator: the
+ * operator holds the provider credentials once, and everyone else gets a key
+ * with credit on it. A user of the gateway never needs an account with
+ * Anthropic or OpenAI -- that relationship belongs to whoever runs the server.
+ *
+ * Only the hash is stored, so a database leak cannot be replayed as a key.
+ */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    /** "key_<sha256 prefix>", the same id used to attribute generations. */
+    id: text("id").primaryKey(),
+    /** sha256 of the key, hex. The key itself is shown once, at creation. */
+    hash: text("hash").notNull().unique(),
+    label: text("label"),
+
+    /** Granted credit, micro-USD. Null means unlimited (an operator key). */
+    creditMicro: bigint("credit_micro", { mode: "number" }),
+    /** Consumed so far, micro-USD. */
+    spentMicro: bigint("spent_micro", { mode: "number" }).notNull().default(0),
+
+    disabled: boolean("disabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [index("api_keys_hash_idx").on(t.hash)],
+);
+
 export const generations = pgTable(
   "generations",
   {
@@ -133,6 +164,8 @@ export const generations = pgTable(
   (t) => [index("generations_created_at_idx").on(t.createdAt)],
 );
 
+export type ApiKeyRow = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
 export type ProviderRow = typeof providers.$inferSelect;
 export type ModelRow = typeof models.$inferSelect;
 export type EndpointRow = typeof endpoints.$inferSelect;

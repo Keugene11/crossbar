@@ -67,10 +67,14 @@ export function toRow(draft: GenerationDraft): NewGeneration {
 export async function recordGeneration(
   store: GenerationStore,
   draft: GenerationDraft,
-): Promise<void> {
+): Promise<NewGeneration> {
+  const row = toRow(draft);
   try {
-    await store.record(toRow(draft));
+    await store.record(row);
   } catch (err) {
     console.error("[crossbar] failed to record generation", draft.id, err);
   }
+  // Returned regardless: the caller debits from this, and a ledger write that
+  // failed must not silently make a request free.
+  return row;
 }
