@@ -7,6 +7,8 @@ import { generationId } from "../providers/common.js";
 import type { Endpoint } from "../registry/catalog.js";
 import { buildCandidates } from "../routing/candidates.js";
 import { executeCascade, MidStreamError } from "../routing/execute.js";
+import { AUTO_MODEL_ID, resolveAuto } from "../routing/auto.js";
+import { estimatePromptTokens } from "../routing/tokens.js";
 import { applyVariant, parseModelRef, requiredCapabilities } from "../routing/variants.js";
 import { defaultProviderPreferences } from "../schemas/routing.js";
 import {
@@ -80,13 +82,37 @@ export function registerChatRoute(app: Hono<AppEnv>, deps: AppDeps): void {
     const ref = parseModelRef(request.model);
     const prefs = applyVariant(request.provider ?? defaultProviderPreferences, ref.variant);
 
+    // `crossbar/auto` resolves to a concrete model before anything else runs,
+    // so every downstream stage sees an ordinary named-model request.
+    let modelId = ref.id;
+    if (modelId === AUTO_MODEL_ID) {
+      const chosen = resolveAuto(deps.catalog, {
+        request,
+        costTier: request.cost_tier ?? "medium",
+        allowedModels: request.allowed_models ?? [],
+      });
+      if (!chosen) {
+        throw new CrossbarError({
+          status: 404,
+          code: "not_found",
+          message: "No model in the catalog can serve this request under the given constraints",
+          retryable: false,
+        });
+      }
+      modelId = chosen;
+    }
+
     const plan = buildCandidates(
       deps.catalog,
-      ref.id,
+      modelId,
       request.models?.map((m) => parseModelRef(m).id),
       prefs,
       { stats: deps.stats, random: deps.random ?? Math.random },
       requiredCapabilities(request),
+      {
+        promptTokens: estimatePromptTokens(request),
+        maxOutputTokens: request.max_completion_tokens ?? request.max_tokens ?? 0,
+      },
     );
 
     // Awaited rather than fire-and-forget: the generation id ships in the

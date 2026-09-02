@@ -3,6 +3,7 @@ import type { Catalog, Endpoint } from "../registry/catalog.js";
 import { defaultProviderPreferences, type ProviderPreferences } from "../schemas/routing.js";
 import { orderEndpoints, type SelectionContext } from "./select.js";
 import { supportsAll } from "./variants.js";
+import { fitsContext } from "./tokens.js";
 
 /**
  * Ceiling on endpoints attempted for one request.
@@ -34,10 +35,14 @@ export function buildCandidates(
   ctx: SelectionContext,
   /** Capabilities the request depends on; enforced when require_parameters is set. */
   required: readonly string[] = [],
+  /** Pre-flight sizing, so endpoints that cannot fit are never attempted. */
+  fit?: { promptTokens: number; maxOutputTokens: number },
 ): CandidatePlan {
   const modelIds = [requestedModel, ...(fallbackModels ?? [])];
   const seen = new Set<string>();
   const endpoints: Endpoint[] = [];
+  /** Endpoints excluded purely because the request is too large for them. */
+  let tooSmall = 0;
 
   // The primary model must exist; a typo in a fallback is not worth a 404 when
   // the primary can still serve the request.
@@ -53,9 +58,30 @@ export function buildCandidates(
       // prose, ignoring the question actually asked. require_parameters lets a
       // caller say they would rather fail than get that.
       if (prefs.require_parameters && !supportsAll(e, required)) continue;
+
+      // Routing to an endpoint whose window cannot hold the prompt buys a
+      // guaranteed 400 and a wasted round-trip. Skip it before we spend one.
+      if (fit && !fitsContext(fit.promptTokens, Math.min(fit.maxOutputTokens, e.maxOutputTokens), e.contextLength)) {
+        tooSmall++;
+        continue;
+      }
+
       seen.add(e.id);
       endpoints.push(e);
     }
+  }
+
+  if (endpoints.length === 0 && tooSmall > 0) {
+    // Every candidate was excluded on size: that is a request problem, not an
+    // availability problem, and 413 says so precisely.
+    throw new CrossbarError({
+      status: 413,
+      code: "context_length_exceeded",
+      message:
+        `Request is too large for every endpoint of "${requestedModel}" ` +
+        `(~${fit?.promptTokens ?? 0} prompt tokens plus requested output)`,
+      retryable: false,
+    });
   }
 
   if (endpoints.length === 0) {

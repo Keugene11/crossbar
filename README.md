@@ -49,6 +49,7 @@ by changing the host alone.
 | `GET /v1/models/:author/:slug` | One model |
 | `GET /v1/models/:author/:slug/endpoints` | Endpoint-level detail for one model |
 | `GET /v1/generation?id=` | Tokens, cost, latency, and the full attempt list |
+| `GET /v1/key` | The calling key's own usage and rate limit |
 | `GET /health` | Liveness (no auth) |
 
 Beyond the OpenAI request body, crossbar accepts:
@@ -66,6 +67,19 @@ Beyond the OpenAI request body, crossbar accepts:
   something the request depends on. Without it, a tool-calling request can land
   on an endpoint that ignores `tools` and answers in prose.
 - **`HTTP-Referer` / `X-Title`** — app attribution, recorded per generation.
+- **`cost_tier` / `allowed_models`** — spend ceiling and allowlist for the auto
+  router.
+
+### The auto router
+
+`model: "crossbar/auto"` picks a model instead of naming one. OpenRouter ranks
+candidates by community spend; there is no community here, so the ranking comes
+from the request itself — tools, images, and reasoning are hard gates, prompt
+size must fit the window, and among everything that qualifies the cheapest wins.
+Capability is a gate, not a gradient: paying for headroom the request never uses
+is exactly the waste an auto router should avoid. Bound it with
+`cost_tier` (`low`/`medium`/`high`/`max`) and `allowed_models`
+(`["anthropic/*"]`).
 
 Every response carries `X-Crossbar-Generation-Id`, `X-Crossbar-Provider`,
 `X-Crossbar-Model`, `X-Crossbar-Endpoint`, and `X-Crossbar-Attempts` — on
@@ -106,11 +120,21 @@ Failure handling is per-status, because not every failure means the same thing:
 Credentials are a property of the provider account, not the request, so one
 expired key retires that provider for the request instead of failing it.
 
+**Sizing.** Every candidate is checked against the request before it is tried:
+an endpoint whose context window cannot hold the prompt plus the requested
+output is skipped rather than attempted. If none can, the request fails 413
+without a single upstream call. The estimate is deliberately approximate — it
+answers "can this possibly fit", not "what will this cost"; billing always uses
+the counts the provider reports back.
+
 **Accounting.** Prices are integer micro-USD per million tokens, never floats;
 cost is rounded exactly once, at the end. Cache reads and cache writes bill at
 their own rates and are counted *inside* `prompt_tokens`, not added to it.
 Failed requests are never billed, even when a cascade burned three providers
-first.
+first — and neither are generations that produced no output tokens
+(zero-completion insurance): the provider still charges us for the prompt, but
+the caller got nothing usable, so passing that on would be billing them for our
+routing decision.
 
 ## Security
 
@@ -176,7 +200,8 @@ src/
   routes/       chat, models, generation, health
   schemas/      Zod contracts -- the OpenAI wire format is the internal one too
   registry/     catalog cache + seed data
-  routing/      candidates -> select -> execute (the cascade), variants, health stats
+  routing/      candidates -> select -> execute (the cascade)
+                auto router, variants, token sizing, health stats
   providers/    anthropic/ (dialect translation), openai/ (reference), classify
   accounting/   cost math and the generation ledger
   db/           Drizzle schema, migrations, dual PGlite / node-postgres driver
@@ -185,7 +210,7 @@ src/
 ## Tests
 
 ```bash
-pnpm test         # 120 tests, no network, no ports
+pnpm test         # 134 tests, no network, no ports
 pnpm test:live    # LIVE=1 -- real provider calls, costs money
 pnpm audit        # dependency vulnerabilities
 ```

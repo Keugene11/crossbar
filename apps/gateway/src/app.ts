@@ -11,6 +11,7 @@ import type { Catalog } from "./registry/catalog.js";
 import type { StatsTracker } from "./routing/stats.js";
 import { registerChatRoute } from "./routes/chat.js";
 import { registerGenerationRoute } from "./routes/generation.js";
+import { registerKeyRoute } from "./routes/key.js";
 import { registerModelRoutes } from "./routes/models.js";
 
 /**
@@ -131,6 +132,7 @@ export function createApp(deps: AppDeps): App {
   registerModelRoutes(v1, deps);
   registerChatRoute(v1, deps);
   registerGenerationRoute(v1, deps);
+  registerKeyRoute(v1, deps);
 
   app.route("/v1", v1);
   // OpenRouter serves its API under /api/v1; accepting both means a client can

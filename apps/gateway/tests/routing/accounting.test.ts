@@ -101,10 +101,26 @@ describe("generation rows", () => {
       ...draft,
       endpoint: endpoint(5, 25),
       finishReason: "stop",
+      usage: usage(1_000_000, 1_000_000),
+      error: null,
+    });
+    expect(row.costMicro).toBe(30_000_000);
+    expect(row.promptTokens).toBe(1_000_000);
+  });
+
+  it("does not bill a generation that produced no output tokens", () => {
+    // Zero-completion insurance: the provider still charges us for the prompt,
+    // but the caller got nothing usable, so passing that on would be billing
+    // them for our routing decision.
+    const row = toRow({
+      ...draft,
+      endpoint: endpoint(5, 25),
+      finishReason: "stop",
       usage: usage(1_000_000, 0),
       error: null,
     });
-    expect(row.costMicro).toBe(5_000_000);
+    expect(row.costMicro).toBe(0);
+    // The tokens are still recorded -- only the charge is waived.
     expect(row.promptTokens).toBe(1_000_000);
   });
 

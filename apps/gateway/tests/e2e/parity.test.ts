@@ -184,3 +184,129 @@ describe("client disconnect", () => {
     expect(events.at(-1)).toBe("[DONE]");
   });
 });
+
+describe("auto router", () => {
+  it("resolves crossbar/auto to a concrete model and routes to it", async () => {
+    harness = await createHarness();
+
+    const res = await postChat(harness.app, {
+      model: "crossbar/auto",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(res.status).toBe(200);
+    // test/dual's anthropic endpoint is cheapest overall, so auto lands there.
+    expect(res.headers.get("x-crossbar-endpoint")).toBe("test/dual::anthropic");
+  });
+
+  it("respects cost_tier as a spend ceiling", async () => {
+    harness = await createHarness();
+
+    // Every seeded endpoint is well under the low ceiling, so this still routes.
+    const cheap = await postChat(harness.app, {
+      model: "crossbar/auto",
+      cost_tier: "low",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(cheap.status).toBe(200);
+  });
+
+  it("honours allowed_models, including author/* prefixes", async () => {
+    harness = await createHarness();
+
+    const res = await postChat(harness.app, {
+      model: "crossbar/auto",
+      allowed_models: ["test/backup"],
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(res.headers.get("x-crossbar-model")).toBe("backup-openai");
+
+    const prefixed = await postChat(harness.app, {
+      model: "crossbar/auto",
+      allowed_models: ["test/*"],
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(prefixed.status).toBe(200);
+  });
+
+  it("404s when nothing satisfies the constraints", async () => {
+    harness = await createHarness();
+    const res = await postChat(harness.app, {
+      model: "crossbar/auto",
+      allowed_models: ["nobody/*"],
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("only considers endpoints that support what the request needs", async () => {
+    // The anthropic test endpoint declares no vision support, so an image
+    // request must land on the openai one even though it costs more.
+    harness = await createHarness();
+    const res = await postChat(harness.app, {
+      model: "crossbar/auto",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "image_url", image_url: { url: "https://e.com/a.png" } }],
+        },
+      ],
+    });
+    expect(res.status).toBe(404); // neither test endpoint declares vision
+  });
+});
+
+describe("context-aware routing", () => {
+  it("refuses a request no endpoint can hold, without spending a round-trip", async () => {
+    harness = await createHarness();
+
+    const res = await postChat(harness.app, {
+      model: "test/dual",
+      // Far past the 100k-token test window.
+      messages: [{ role: "user", content: "x".repeat(2_000_000) }],
+    });
+
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as any).error.code).toBe("context_length_exceeded");
+    // The point: no upstream call was made at all.
+    expect(harness.anthropic.received).toHaveLength(0);
+    expect(harness.openai.received).toHaveLength(0);
+  });
+});
+
+describe("key info", () => {
+  it("reports the calling key's own usage and rate limit", async () => {
+    harness = await createHarness({ apiKeys: ["sk-alice"], rateLimitRpm: 600 });
+
+    await postChat(
+      harness.app,
+      { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-alice" },
+    );
+
+    const res = await harness.app.request("/v1/key", {
+      headers: { authorization: "Bearer sk-alice" },
+    });
+    const body = (await res.json()) as any;
+
+    expect(body.data.label).toMatch(/^key_/);
+    expect(body.data.rate_limit).toEqual({ requests: 600, interval: "1m" });
+    expect(body.data.usage_details.requests).toBe(1);
+    expect(body.data.usage).toBeGreaterThan(0);
+  });
+
+  it("does not leak another key's usage", async () => {
+    harness = await createHarness({ apiKeys: ["sk-alice", "sk-bob"] });
+
+    await postChat(
+      harness.app,
+      { model: "test/dual", messages: [{ role: "user", content: "hi" }] },
+      { authorization: "Bearer sk-alice" },
+    );
+
+    const bob = await harness.app.request("/v1/key", {
+      headers: { authorization: "Bearer sk-bob" },
+    });
+    expect(((await bob.json()) as any).data.usage_details.requests).toBe(0);
+  });
+});

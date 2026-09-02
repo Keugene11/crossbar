@@ -27,7 +27,13 @@ export function toRow(draft: GenerationDraft): NewGeneration {
 
   // Failed requests are not billed. A cascade that burned three providers
   // before giving up must not charge for any of them.
-  const billable = endpoint !== null && usage !== null && draft.error === null;
+  //
+  // Zero-completion insurance: a generation that produced no output tokens is
+  // also free, even though the provider will still charge us for the prompt.
+  // The caller got nothing usable, so passing on the input cost would be
+  // billing them for our routing decision.
+  const producedOutput = (usage?.completion_tokens ?? 0) > 0;
+  const billable = endpoint !== null && usage !== null && draft.error === null && producedOutput;
 
   return {
     id: draft.id,

@@ -146,6 +146,10 @@ export const ChatCompletionRequest = z
     provider: ProviderPreferences.optional(),
     /** Force usage accounting into the final streamed chunk. */
     usage: z.object({ include: z.boolean() }).optional(),
+    /** Spend ceiling for `crossbar/auto`. Ignored for a named model. */
+    cost_tier: z.enum(["low", "medium", "high", "max"]).optional(),
+    /** Restrict `crossbar/auto` to these ids or `author/*` prefixes. */
+    allowed_models: z.array(z.string().max(LIMITS.modelIdLength)).max(64).optional(),
   })
   .strict();
 

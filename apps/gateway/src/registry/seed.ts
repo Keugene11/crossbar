@@ -47,6 +47,18 @@ const NO_SAMPLING_NO_FORCED_TOOLS = [...NO_SAMPLING, "tool_choice:required", "to
 
 export const catalogSeed: SeedModel[] = [
   {
+    // Not a real model: `crossbar/auto` is resolved to a concrete one before
+    // routing. It carries no endpoints, and the router skips it explicitly.
+    id: "crossbar/auto",
+    name: "crossbar: Auto Router",
+    description:
+      "Picks a model from the catalog based on what the request needs, capped by cost_tier.",
+    contextLength: 1_000_000,
+    inputModalities: ["text", "image"],
+    outputModalities: ["text"],
+    endpoints: [],
+  },
+  {
     id: "anthropic/claude-opus-5",
     name: "Anthropic: Claude Opus 5",
     description: "Anthropic's default frontier model. Adaptive thinking on by default.",
